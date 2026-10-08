@@ -138,8 +138,20 @@
             var files = e.target.files || [];
             if (!files.length) return;
 
-            const jsonData = await getDataFromExcel(files[0])
-            createTable(jsonData[jsonData.sheets[0]], '#tableprev')
+            try {
+                const jsonData = await getDataFromExcel(files[0])
+                if (!jsonData || !jsonData.sheets || !jsonData.sheets.length) {
+                    $('#submit-excel').attr('disabled', 'disabled');
+                    toastPeringatan('File Excel tidak bisa dibaca. Pastikan file berformat .xlsx (bukan .xls atau .csv).');
+                    return;
+                }
+                createTable(jsonData[jsonData.sheets[0]], '#tableprev')
+            } catch (err) {
+                console.log("gagal baca excel:", err);
+                $('#submit-excel').attr('disabled', 'disabled');
+                $('#tableprev').html('');
+                toastPeringatan('File Excel tidak bisa dibaca. Gunakan file .xlsx hasil download template, bukan .xls atau .csv.');
+            }
         });
 
         $('#formUpload').on('submit', function (e) {
@@ -218,6 +230,18 @@
         $(".dropify-filename-inner").text("");
     }
 
+    function toastPeringatan(pesan) {
+        $.toast({
+            heading: "File tidak bisa diproses",
+            text: pesan,
+            icon: 'warning',
+            showHideTransition: 'fade',
+            allowToastClose: true,
+            hideAfter: 8000,
+            position: 'top-right'
+        });
+    }
+
     function createTable(list, selector) {
         let cols = Headers(list.header, selector);
         let len = list.rows.length;
@@ -246,6 +270,7 @@
             })
         } else {
             $('#submit-excel').attr('disabled', 'disabled');
+            toastPeringatan('File Excel belum berisi data siswa. Isi baris data di bawah judul kolom, lalu pilih file ulang.');
         }
     }
 
@@ -309,8 +334,10 @@
                                             val = richToString(row.values[i])
                                         }
                                         if (i===2||i===3||i===14||i===19||i===20||i===30||i===36||i===42) {
-                                            val = val.replace("'", "")
-                                            console.log('index', i, val)
+                                            // Excel menyimpan angka sebagai number, bukan string.
+                                            // Tanpa String(), .replace() melempar TypeError dan
+                                            // seluruh parsing berhenti -> tombol Upload stuck.
+                                            val = String(val).replace("'", "")
                                         }
                                         obj[i] = val
                                     }
@@ -321,6 +348,8 @@
                             dataFiles[sheet.name] = cols
                         })
                         resolve(dataFiles)
+                    }).catch(err => {
+                        reject(err)
                     })
                 } catch (err) {
                     reject(err)

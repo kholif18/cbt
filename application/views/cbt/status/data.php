@@ -5,6 +5,11 @@
  * Date: 07/07/20
  * Time: 17:20
  */
+
+/* Status aksi Paksa Selesai untuk pengawas disimpan di tabel cbt_setting_flag
+   supaya berlaku di semua server tanpa perlu restart. */
+$this->load->helper('cbt_sesi');
+$paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
 ?>
 
 <div class="content-wrapper bg-white">
@@ -26,6 +31,19 @@
                     <button class="card-tools btn btn-default btn-sm mr-2 btn-toggle" data-toggle="modal"
                             data-target="#infoModal"><i class="fas fa-info-circle mr-1"></i> Info Error
                     </button>
+                    <?php
+                    /* Tombol ini sengaja kecil dan tidak mencolok: menyetel hak
+                       akses pengawas bukan aksi harian. Hanya admin yang boleh. */
+                    if ($this->ion_auth->is_admin()) {
+                        ?>
+                        <button type="button" class="card-tools btn btn-outline-secondary btn-sm ml-2"
+                                id="btn-sembunyi-paksa" data-toggle="tooltip"
+                                title="Sembunyikan atau tampilkan aksi Paksa Selesai untuk semua pengawas">
+                            <i class="fas <?= $paksaDisembunyi ? 'fa-eye' : 'fa-eye-slash' ?> mr-1"></i>
+                            <span id="label-sembunyi-paksa"
+                                  data-state="<?= $paksaDisembunyi ? '1' : '0' ?>"><?= $paksaDisembunyi ? 'Tampilkan Paksa Selesai ke Pengawas' : 'Sembunyikan Paksa Selesai dari Pengawas' ?></span>
+                        </button>
+                    <?php } ?>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -536,6 +554,56 @@
             }
         });
     }
+
+    /* Tombol admin untuk menyembunyikan / menampilkan kembali aksi Paksa
+       Selesai bagi semua pengawas. Hanya menyentuh kolom Paksa Selesai:
+       Reset Waktu, Reset Izin, dan Ulang tetap terbuka untuk pengawas. */
+    function togglePaksaSelesai() {
+        var disembunyi = $('#label-sembunyi-paksa').data('state') === '1';
+        var judul = disembunyi ? 'Tampilkan Paksa Selesai?' : 'Sembunyikan Paksa Selesai?';
+        var pesan = disembunyi
+            ? 'Kolom <b>Paksa Selesai</b> akan kembali tampil untuk semua pengawas.'
+            : 'Kolom <b>Paksa Selesai</b> akan disembunyikan dari semua pengawas, '
+            + 'termasuk otomatis saat sisa waktu tinggal di bawah 15 menit. '
+            + 'Aksi lain (Reset Waktu, Reset Izin, Ulang) tetap tersedia.';
+
+        swal.fire({
+            title: judul,
+            html: pesan,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya'
+        }).then(result => {
+            if (!result.value) return;
+
+            $.ajax({
+                url: base_url + "cbtstatus/togglepakaseselesai",
+                type: 'POST',
+                dataType: 'json',
+                success: function (res) {
+                    if (res && res.status == 1) {
+                        $('#label-sembunyi-paksa')
+                            .data('state', res.disembunyi ? '1' : '0')
+                            .text(res.disembunyi
+                                ? 'Tampilkan Paksa Selesai ke Pengawas'
+                                : 'Sembunyikan Paksa Selesai dari Pengawas');
+                        $('#btn-sembunyi-paksa i')
+                            .attr('class', 'fas ' + (res.disembunyi ? 'fa-eye' : 'fa-eye-slash') + ' mr-1');
+                        showSuccessToast(res.pesan);
+                    } else {
+                        showWarningToast(res && res.pesan ? res.pesan : 'Gagal menyimpan.');
+                    }
+                },
+                error: function () {
+                    showWarningToast('Gagal menyimpan.');
+                }
+            });
+        });
+    }
+
+    $(document).on('click', '#btn-sembunyi-paksa', togglePaksaSelesai);
 
     $(document).ready(function () {
         ajaxcsrf();

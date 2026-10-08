@@ -155,6 +155,9 @@
     let soalTerjawab = 0, soalTotal = 0;
     let timerOut;
     let timerSelesai;
+    /* Cegah soal basi tampil: hanya request terakhir yang boleh merender. */
+    let soalXhr = null;
+    let soalReqSeq = 0;
     //const durasi = JSON.parse(JSON.stringify(<?= json_encode($elapsed) ?>));
     let elapsed = '0';
     let h, m, s;
@@ -166,6 +169,17 @@
         _hour = _minute * 60,
         _day = _hour * 24;
     const durasiUjian = Number(infoJadwal.durasi_ujian);
+    /* Batas akhir ujian dihitung server (Siswa::pennial -> Cbt_model::getBatasUjian):
+       min(siswa mulai + durasi_ujian, jam akhir sesi). Dipakai supaya countdown
+       ikut terpotong saat jam sesi berakhir dan tidak bisa dimanipulasi dari sisi
+       browser. Kalau null (mis. data lama), tetap pakai durasi_ujian. */
+    const batasServer = JSON.parse(JSON.stringify(<?= json_encode(isset($batas) ? $batas : null) ?>));
+    let deadlineMs = null;
+    let mulaiMs = null;
+    if (batasServer != null) {
+        if (batasServer.sisa_detik != null) deadlineMs = Date.now() + (Number(batasServer.sisa_detik) * 1000);
+        if (batasServer.mulai_siswa) mulaiMs = new Date(String(batasServer.mulai_siswa).replace(' ', 'T')).getTime();
+    }
     let dif;
     let fieldLinks;
     let zoomClicked = 1;
@@ -223,6 +237,10 @@
                 contentType: false,
                 data: formData,
                 success: function (response) {
+                    if (response.waktu_habis) {
+                        dialogWaktu();
+                        return;
+                    }
                     soalTerjawab = response.soal_terjawab;
                     loadSoalNomor(nav);
                 },
@@ -247,15 +265,31 @@
         var dataPost = $('#up').serialize() + '&nomor=' + nomor + '&timer=' + $('#timer').text() + '&elapsed=' + elapsed;
         //console.log('res', dataPost);
         if (soalTotal === 0 || nomor <= parseInt(soalTotal)) {
-            $.ajax({
+            /* Request sebelumnya dibatalkan dan responsnya diabaikan supaya
+               soal yang tampil selalu sesuai nomor terakhir yang diklik. */
+            if (soalXhr && soalXhr.readyState !== 4) {
+                soalXhr.abort();
+            }
+            const reqSeq = ++soalReqSeq;
+            soalXhr = $.ajax({
                 type: 'POST',
                 url: base_url + 'siswa/loadnomorsoal',
                 data: dataPost,
                 success: function (data) {
+                    if (reqSeq !== soalReqSeq) {
+                        return;
+                    }
                     console.log('load soal', data);
                     $('#loading').addClass('d-none');
+                    if (data.waktu_habis) {
+                        selesai();
+                        return;
+                    }
                     setKonten(data);
                 }, error: function (xhr, error, status) {
+                    if (status === 'abort' || reqSeq !== soalReqSeq) {
+                        return;
+                    }
                     showDangerToast('ERROR!');
                     console.log(xhr.responseText);
                 }
@@ -537,32 +571,39 @@
 
     function setElapsed(durasi) {
         elapsed = durasi.lama_ujian == null || durasi.lama_ujian == '0' ? "00:00:00" : durasi.lama_ujian;
-        createTimerCountdown(durasiUjian, elapsed.split(':'), function (isOver, remaining, onGoing) {
-            $('#timer').html(remaining);
-            elapsed = onGoing;
-            if (isOver) {
-                $('#prev').attr('disabled', 'disabled');
-                $('#next').attr('disabled', 'disabled');
+        if (deadlineMs != null) {
+            createTimerDeadline(deadlineMs, onTick);
+        } else {
+            createTimerCountdown(durasiUjian, elapsed.split(':'), onTick);
+        }
+    }
 
-                var siswa = $('#up').find('input[name="siswa"]').val();
-                var bank = $('#up').find('input[name="bank"]').val();
-                var jadwal = $('#up').find('input[name="jadwal"]').val();
+    /* dipakai bersama oleh countdown durasi_ujian dan countdown batas server */
+    function onTick(isOver, remaining, onGoing) {
+        $('#timer').html(remaining);
+        if (onGoing) elapsed = onGoing;
+        if (isOver) {
+            $('#prev').attr('disabled', 'disabled');
+            $('#next').attr('disabled', 'disabled');
 
-                $.ajax({
-                    url: base_url + 'siswa/savejawaban',
-                    method: 'POST',
-                    data: $('#jawab').serialize() + '&jadwal=' + jadwal + '&siswa=' + siswa + '&bank=' + bank +
-                        '&waktu=' + $('#timer').text() + '&elapsed=' + elapsed + '&data=' + JSON.stringify(jsonJawaban),
-                    success: function (response) {
-                        $('.konten-soal-jawab').html('');
-                        dialogWaktu();
-                    },
-                    error: function (xhr, error, status) {
-                        console.log(xhr.responseText);
-                    }
-                });
-            }
-        })
+            var siswa = $('#up').find('input[name="siswa"]').val();
+            var bank = $('#up').find('input[name="bank"]').val();
+            var jadwal = $('#up').find('input[name="jadwal"]').val();
+
+            $.ajax({
+                url: base_url + 'siswa/savejawaban',
+                method: 'POST',
+                data: $('#jawab').serialize() + '&jadwal=' + jadwal + '&siswa=' + siswa + '&bank=' + bank +
+                    '&waktu=' + $('#timer').text() + '&elapsed=' + elapsed + '&data=' + JSON.stringify(jsonJawaban),
+                success: function (response) {
+                    $('.konten-soal-jawab').html('');
+                    dialogWaktu();
+                },
+                error: function (xhr, error, status) {
+                    console.log(xhr.responseText);
+                }
+            });
+        }
     }
 
     function nextSoal() {
@@ -1013,6 +1054,51 @@
 
     function zeroPad(no) {
         return no < 10 ? '0' + no : no;
+    }
+
+    /* Countdown ke batas waktu absolut dari server (min(mulai + durasi, akhir sesi)).
+       Dipakai kalau getBatasUjian() sudahprovide sisa_detik, supaya jam di
+       browser tidak berpengaruh dan jam sesi tetap mengikat. */
+    function createTimerDeadline(deadline, func) {
+        const perdetik = 1000;
+        const permenit = 60 * perdetik;
+        const perjam = 60 * permenit;
+
+        testTimer();
+
+        function testTimer() {
+            if (timerOut) {
+                clearTimeout(timerOut);
+                timerOut = null;
+            }
+
+            const nowMs = Date.now();
+            const t_remaining = deadline - nowMs;
+            if (t_remaining <= 0) {
+                if (func && (typeof func == "function")) {
+                    func(true, 'Waktu habis', '00:00:00');
+                }
+                return;
+            }
+
+            const r_jam = Math.floor(t_remaining / perjam);
+            const r_mnt = Math.floor((t_remaining % perjam) / permenit);
+            const r_dtk = Math.floor((t_remaining % permenit) / perdetik);
+
+            // elapsed = jarak dari jam mulai siswa, dipakai saat menyimpan jawaban
+            let onGoing = null;
+            if (mulaiMs != null) {
+                const e = Math.max(0, Math.floor((nowMs - mulaiMs) / 1000));
+                onGoing = zeroPad(Math.floor(e / 3600)) + ':' +
+                    zeroPad(Math.floor((e % 3600) / 60)) + ':' +
+                    zeroPad(e % 60);
+            }
+
+            if (func && (typeof func == "function")) {
+                func(false, zeroPad(r_jam) + ':' + zeroPad(r_mnt) + ':' + zeroPad(r_dtk), onGoing);
+            }
+            timerOut = setTimeout(testTimer, 1000);
+        }
     }
 
     function encode(str) {

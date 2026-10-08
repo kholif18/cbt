@@ -10,6 +10,11 @@ date_default_timezone_set('Asia/Jakarta');
 // $config['base_url'] .= preg_replace('@/+$@','',dirname($_SERVER['SCRIPT_NAME'])).'/';
 
 $scheme = (isset($_SERVER["HTTPS"]) && @$_SERVER["HTTPS"] == "on") ? "https" : "http";
+
+/* Panjang minimum NIS yang diizinkan.
+   Sekolah yang memakai NIS 4 angka dapat menurunkan nilai ini.
+   Dipakai aturan validasi form siswa, alumni, dan wali siswa. */
+$config['min_panjang_nis'] = 4;
 $config['base_url'] = "$scheme://".$_SERVER['HTTP_HOST'];
 $config['base_url'] .= preg_replace('@/+$@','',dirname($_SERVER['SCRIPT_NAME'])).'/';
 
@@ -98,7 +103,7 @@ $config['encryption_key'] = '498f8140edc311eb94b9c83dd4416dc8';
 $config['sess_driver'] = 'files';
 $config['sess_cookie_name'] = 'ci_session';
 $config['sess_expiration'] = 7200 * 12; // 1 jam
-$config['sess_save_path'] = NULL;
+$config['sess_save_path'] = getenv('CBT_SESSION_PATH') ?: '/tmp';
 $config['sess_match_ip'] = FALSE;
 $config['sess_time_to_update'] = 3000;
 $config['sess_regenerate_destroy'] = FALSE;

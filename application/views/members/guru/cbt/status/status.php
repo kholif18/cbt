@@ -31,6 +31,19 @@
                 </div>
                 <?php
                 $dnone = in_array($guru->id_guru, $ids_pengawas) ? '' : 'd-none';
+                /* Menu "Paksa Selesai" untuk pengawas disembunyikan, lalu muncul
+                   otomatis saat sisa waktu ke jam akhir sesi < 15 menit.
+                   Halaman admin tidak memakai aturan ini. */
+                $this->load->helper('cbt_sesi');
+                /* Pakai tanggal hari ini, bukan tgl_mulai jadwal: halaman status
+                   dipakai saat ujian berjalan, dan tgl_mulai bisa sudah
+                   kedaluwarsa sehingga jam sesi selalu terbaca "lewat". */
+                $petaSesi = cbt_peta_sesi_batas(date('Y-m-d'));
+                /* Hanya kolom Paksa Selesai yang bisa disembunyikan admin.
+                   $dnone di atas mengatur kelima kolom aksi sekaligus, jadi
+                   tidak boleh dipakai di sini, kalau tidak Reset Waktu,
+                   Reset Izin, dan Ulang ikut hilang. */
+                $forceHide = ($dnone !== '' || cbt_paksa_selesai_disembunyikan());
                 ?>
                 <div class="card-body">
                     <div class="row">
@@ -129,6 +142,11 @@
                                 <label><input type="search" id="cari-status-siswa"
                                               class="form-control form-control-sm" placeholder="Cari">
                                 </label>
+                                <button type="button" class="ml-2 btn btn-warning d-none" id="toggle-force"
+                                        data-toggle="tooltip"
+                                        title="Tampilkan menu Paksa Selesai untuk siswa terpilih">
+                                    <i class="fa fa-unlock ml-1 mr-1"></i> Tampilkan Paksa Selesai
+                                </button>
                                 <button type="button" class="ml-2 btn btn-success <?= $dnone ?>"
                                         onclick="terapkanAksi()"
                                         data-toggle="tooltip"
@@ -158,7 +176,7 @@
                                 <th class="text-center align-middle p-1">Mulai</th>
                                 <th class="text-center align-middle">Durasi</th>
                                 <th class="text-center align-middle <?=$dnone?>">Reset<br>Izin<br><input id="input-reset-all" class="check" type="checkbox"></th>
-                                <th class="text-center align-middle <?=$dnone?>">Paksa<br>Selesai<br><input id="input-force-all" class="check" type="checkbox"></th>
+                                <th class="text-center align-middle <?=$forceHide ? 'd-none' : ''?> force-col" id="th-force">Paksa<br>Selesai<br><input id="input-force-all" class="check" type="checkbox"></th>
                                 <th class="text-center align-middle <?=$dnone?>">Ulang<br><input id="input-ulang-all" class="check" type="checkbox"></th>
                             </tr>
                             </thead>
@@ -223,7 +241,7 @@
                                     <td class="text-center text-success align-middle <?=$dnone?>">
                                         <input class="check input-reset" type="checkbox" <?=$disabledReset?>>
                                     </td>
-                                    <td class="text-center text-danger align-middle <?=$dnone?>">
+                                    <td class="text-center text-danger align-middle <?=$forceHide ? 'd-none' : ''?> force-col" data-sesi="<?=$sesi?>">
                                         <input class="check input-force" type="checkbox" <?=$disabledSelesai?>>
                                     </td>
                                     <td class="text-center text-danger align-middle <?=$dnone?>">
@@ -334,6 +352,67 @@
     var jadwal = '<?=$info->id_jadwal?>'
     var dnone = isPengawas == "1" ? '' : 'd-none';
 
+    /* Gating menu "Paksa Selesai" untuk pengawas: kolom disembunyikan, muncul
+       otomatis saat sisa waktu ke jam akhir sesi < 15 menit, atau saat dibuka
+       manual lewat tombol "Tampilkan Paksa Selesai". */
+    const PETA_SESI = <?= json_encode($petaSesi, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const AMBANG_PAKSA_SELESAI = <?= AMBANG_PAKSA_SELESAI_DETIK ?>;
+    /* Admin bisa menyembunyikan aksi Paksa Selesai dari semua pengawas lewat
+       tombol di halaman admin. Kalau aktif, kolom ini tidak boleh dibuka,
+       termasuk secara otomatis saat sisa waktu < 15 menit. */
+    const PAKSA_DISEMBUNYIKAN_ADMIN = <?= cbt_paksa_selesai_disembunyikan() ? '1' : '0' ?>;
+    let forceDibukaManual = false;
+
+    function sisaSesi(kodeSesi) {
+        const p = PETA_SESI[kodeSesi];
+        if (!p || !p.akhir_ts) return null;
+        return p.akhir_ts - Math.floor(Date.now() / 1000);
+    }
+
+    /* true bila ada siswa di tabel ini yang sesinya tinggal < 15 menit */
+    function forceOtomatisTerbuka() {
+        let ada = false;
+        $('#table-status').find('.force-col[data-sesi]').each(function () {
+            const sisa = sisaSesi($(this).data('sesi'));
+            if (sisa != null && sisa < AMBANG_PAKSA_SELESAI) ada = true;
+        });
+        return ada;
+    }
+
+    function forceKolomTerbuka() {
+        return PAKSA_DISEMBUNYIKAN_ADMIN != '1' && !$('#th-force').hasClass('d-none');
+    }
+
+    function terapkanVisibilitasPaksa() {
+        const otomatis = PAKSA_DISEMBUNYIKAN_ADMIN != '1' && forceOtomatisTerbuka();
+        const buka = PAKSA_DISEMBUNYIKAN_ADMIN != '1' && (forceDibukaManual || otomatis);
+
+        $('#th-force').toggleClass('d-none', !buka);
+        $('#table-status').find('.force-col[data-sesi]').toggleClass('d-none', !buka);
+
+        if (buka) {
+            $('#input-force-all').removeClass('d-none');
+        } else {
+            // jangan sisakan centang tersembunyi supaya tidak ikut terkirim
+            $('#input-force-all').prop('checked', false).addClass('d-none');
+            $('#table-status').find('.input-force').prop('checked', false);
+        }
+
+        // tombol: tampil saat kolom tertutup (untuk buka manual), atau saat kolom
+        // dibuka manual tapi belum masuk window <15 menit (untuk ditutup lagi).
+        // Saat otomatis (<15 menit) kolom wajib terbuka dan tidak bisa ditutup.
+        const tombol = $('#toggle-force');
+        let tampilTombol = false, label = '';
+        if (!buka) {
+            tampilTombol = true;
+            label = '<i class="fa fa-unlock ml-1 mr-1"></i> Tampilkan Paksa Selesai';
+        } else if (forceDibukaManual && !otomatis) {
+            tampilTombol = true;
+            label = '<i class="fa fa-lock ml-1 mr-1"></i> Sembunyikan Paksa Selesai';
+        }
+        tombol.toggleClass('d-none', !tampilTombol || isPengawas != "1" || PAKSA_DISEMBUNYIKAN_ADMIN == '1').html(label);
+    }
+
     function terapkanAksi() {
         const $rows = $('#table-status').find('tr'), headers = $rows.splice(0, 2);
         let item = {};
@@ -352,7 +431,7 @@
                 item ["reset"].push(siswa_id + '0' + jadwal + '1');
                 //item ["id_logs"].push(siswa_id+''+jadwal);
             }
-            if ($colForce.prop("checked") === true) {
+            if (forceKolomTerbuka() && $colForce.prop("checked") === true) {
                 item ["force"].push(siswa_id + '0' + jadwal);
                 item ["log"].push(siswa_id);
             }
@@ -408,6 +487,17 @@
     $(document).ready(function () {
         var idSiswa = '';
         var idJadwal = '';
+
+        // gating "Paksa Selesai" + tombol tampilkan
+        terapkanVisibilitasPaksa();
+        setInterval(terapkanVisibilitasPaksa, 30000);
+
+        $('#toggle-force').on('click', function () {
+            // saat sesi tinggal <15 menit kolom wajib terbuka, tidak bisa ditutup
+            if (forceOtomatisTerbuka()) return;
+            forceDibukaManual = !forceDibukaManual;
+            terapkanVisibilitasPaksa();
+        });
 
         $('#cari-status-siswa').quicksearch('#table-status tbody tr');
 

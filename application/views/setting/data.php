@@ -190,6 +190,7 @@ $satuan = ["1" => ["SD", "MI"], "2" => ["SMP", "MTS"], "3" => ["SMA", "MA", "SMK
     var logoKanan = '<?=base_url() . $setting->logo_kanan?>';
     var logoKiri = '<?=base_url() . $setting->logo_kiri?>';
     var tandatangan = '<?=base_url() . $setting->tanda_tangan?>';
+    var pendingUploads = 0;
     var satuanPend = JSON.parse(JSON.stringify(<?= json_encode($satuan)?>));
 
     function submitSetting() {
@@ -282,48 +283,68 @@ $satuan = ["1" => ["SD", "MI"], "2" => ["SMP", "MTS"], "3" => ["SMA", "MA", "SMK
                     text: "Isi semua pilihan yang bertanda bintang (*)",
                     icon: "error"
                 });
+            } else if (pendingUploads > 0) {
+                Swal.fire({
+                    title: "ERROR",
+                    text: "Upload file belum selesai. Tunggu sebentar lalu simpan lagi.",
+                    icon: "error"
+                });
+            } else if (!logoKiri) {
+                Swal.fire({
+                    title: "PERINGATAN",
+                    text: "Logo aplikasi kosong akan diganti logo bawaan. Yakin tetap disimpan?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonColor: "#3085d6"
+                }).then(function (r) {
+                    if (r.value) kirimSetting();
+                });
             } else {
-                swal.fire({
-                    text: "Silahkan tunggu....",
-                    button: false,
-                    closeOnClickOutside: false,
-                    closeOnEsc: false,
-                    allowEscapeKey: false,
-                    allowOutsideClick: false,
-                    onOpen: () => {
-                        swal.showLoading();
-                    }
-                });
-                $.ajax({
-                    url: base_url + 'settings/savesetting',
-                    type: 'POST',
-                    data: $(this).serialize() + '&logo_kanan=' + logoKanan + '&logo_kiri=' + logoKiri + '&tanda_tangan=' + tandatangan,
-                    success: function (response) {
-                        console.log(response);
-                        swal.fire({
-                            title: "Sukses",
-                            html: "Berhasil menyimpan pengaturan",
-                            icon: "success",
-                            showCancelButton: false,
-                            confirmButtonColor: "#3085d6",
-                        }).then(result => {
-                            if (result.value) {
-                                window.location.href = base_url + 'settings';
-                            }
-                        });
-                    },
-                    error: function (xhr, error, status) {
-                        console.log(xhr.responseText);
-                        const err = JSON.parse(xhr.responseText)
-                        swal.fire({
-                            title: "Error",
-                            text: err.Message,
-                            icon: "error"
-                        });
-                    }
-                });
+                kirimSetting();
             }
         });
+
+        function kirimSetting() {
+            swal.fire({
+                text: "Silahkan tunggu....",
+                button: false,
+                closeOnClickOutside: false,
+                closeOnEsc: false,
+                allowEscapeKey: false,
+                allowOutsideClick: false,
+                onOpen: () => {
+                    swal.showLoading();
+                }
+            });
+            $.ajax({
+                url: base_url + 'settings/savesetting',
+                type: 'POST',
+                data: $('#savesetting').serialize() + '&logo_kanan=' + logoKanan + '&logo_kiri=' + logoKiri + '&tanda_tangan=' + tandatangan,
+                success: function (response) {
+                    console.log(response);
+                    swal.fire({
+                        title: "Sukses",
+                        html: "Berhasil menyimpan pengaturan",
+                        icon: "success",
+                        showCancelButton: false,
+                        confirmButtonColor: "#3085d6",
+                    }).then(result => {
+                        if (result.value) {
+                            window.location.href = base_url + 'settings';
+                        }
+                    });
+                },
+                error: function (xhr, error, status) {
+                    console.log(xhr.responseText);
+                    const err = JSON.parse(xhr.responseText)
+                    swal.fire({
+                        title: "Error",
+                        text: err.Message,
+                        icon: "error"
+                    });
+                }
+            });
+        }
 
         $("#logo-kanan").change(function () {
             var input = $(this)[0];
@@ -370,6 +391,7 @@ $satuan = ["1" => ["SD", "MI"], "2" => ["SMP", "MTS"], "3" => ["SMA", "MA", "SMK
         });
 
         function uploadAttach(action, data) {
+            pendingUploads++;
             $.ajax({
                 type: "POST",
                 enctype: 'multipart/form-data',
@@ -380,14 +402,17 @@ $satuan = ["1" => ["SD", "MI"], "2" => ["SMP", "MTS"], "3" => ["SMA", "MA", "SMK
                 cache: false,
                 timeout: 600000,
                 success: function (data) {
+                    // cache-busting: URL harus berubah tiap upload, kalau tidak
+                    // browser (max-age 4 jam) & Cloudflare menyajikan file lama
+                    var v = '?v=' + Date.now();
                     if (data.src.includes('kanan')) {
-                        logoKanan = data.src;
+                        logoKanan = data.src + v;
                         //console.log('kanan', data.src);
                     } else if (data.src.includes('kiri')) {
-                        logoKiri = data.src;
+                        logoKiri = data.src + v;
                         //console.log('kiri', data.src);
                     } else if (data.src.includes('tanda')) {
-                        tandatangan = data.src;
+                        tandatangan = data.src + v;
                         //console.log('tandatangan', data.src);
                     }
                 },
@@ -402,14 +427,20 @@ $satuan = ["1" => ["SD", "MI"], "2" => ["SMP", "MTS"], "3" => ["SMA", "MA", "SMK
                         hideAfter: 5000,
                         position: 'top-right'
                     });
+                },
+                complete: function () {
+                    pendingUploads--;
                 }
             });
         }
 
         function deleteImage(src) {
-            console.log(src);
+            // buang cache-busting query string; unlink() akan gagal diam-diam
+            // kalau path berisi "?v=..."
+            var path = String(src).split('?')[0];
+            console.log(path);
             $.ajax({
-                data: {src: src},
+                data: {src: path},
                 type: "POST",
                 url: base_url + "settings/deletefile",
                 cache: false,

@@ -163,7 +163,7 @@
                                                     <br>
                                                     <br>
                                                     <span id="prev-kepsek"><u><?= $setting->kepsek ?></u></span>
-                                                    <p id="prev-nip" style="margin-top: 4px; margin-bottom: 4px">NIP: <?= $setting_rapor != null && $setting_rapor->nip_kepsek == '1' ? $setting->nip : '-' ?></p>
+                                                    <p id="prev-nip" style="margin-top: 4px; margin-bottom: 4px">NIP: <?= ($setting_rapor == null || $setting_rapor->nip_kepsek == '1') && $setting->nip != '' ? $setting->nip : '-' ?></p>
                                                 </div>
                                             </td>
                                         </tr>
@@ -266,7 +266,7 @@
     var printBy = 1;
 
     var raporSetting = JSON.parse(JSON.stringify(<?= json_encode($setting_rapor) ?>));
-    var nipKepsek = raporSetting != null && raporSetting.nip_kepsek === "1" ? nip : " -";
+    var nipKepsek = (raporSetting == null || raporSetting.nip_kepsek === "1") && nip !== "" ? nip : " -";
     console.log('nip', nipKepsek)
 
     function submitKartu() {

@@ -493,8 +493,19 @@
     }
 
     async function parseFile(file) {
-        const jsonData = await getDataFromExcel(file)
+        let jsonData = null;
+        try {
+            jsonData = await getDataFromExcel(file)
+        } catch (err) {
+            console.log("gagal baca excel:", err);
+            toastPeringatan('File Excel tidak bisa dibaca. Gunakan file .xlsx hasil download template, bukan .xls atau .csv.');
+            return;
+        }
         console.log('parse', jsonData)
+        if (!jsonData || !jsonData.NILAI || !jsonData.NILAI.rows || !jsonData.NILAI.rows.length) {
+            toastPeringatan('Sheet "NILAI" tidak ditemukan atau kosong. Pastikan file .xlsx hasil download template, dan data ada di sheet NILAI.');
+            return;
+        }
         if (jsonData) {
             swal.fire({
                 title: "UPLOAD",
@@ -509,6 +520,19 @@
                 }
             });
         }
+    }
+
+
+    function toastPeringatan(pesan) {
+        $.toast({
+            heading: "File tidak bisa diproses",
+            text: pesan,
+            icon: 'warning',
+            showHideTransition: 'fade',
+            allowToastClose: true,
+            hideAfter: 8000,
+            position: 'top-right'
+        });
     }
 
 </script>

@@ -270,7 +270,7 @@ $satuan = [
     var levelAkhir = ["6", "9", "12"];
     var klsAkhir = inArray(level, levelAkhir);
 
-    var nipKepsek = raporSetting != null && raporSetting.nip_kepsek === '1' ? setting.nip : '';
+    var nipKepsek = (raporSetting == null || raporSetting.nip_kepsek === '1') && setting.nip ? setting.nip : '';
     var nipWalas = raporSetting != null && raporSetting.nip_walikelas === '1' ? guru.nip : '';
 
     function inArray(val, array) {

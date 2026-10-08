@@ -67,34 +67,57 @@
                                 foreach ($ruangs as $ruang => $sesis) :
                                     foreach ($sesis as $sesi) :
                                         foreach ($jadwals as $idmpl => $jadwal):
+                                            /*
+                                             * Satu grup = tanggal + mata pelajaran, isinya bisa
+                                             * beberapa bank soal untuk kelas/level berbeda (mis.
+                                             * TEST7 kelas 7, TEST8 kelas 8, TEST9 kelas 9).
+                                             *
+                                             * Dulu semua id_jadwal di grup ikut dimasukkan ke
+                                             * data-id, padahal ruang/sesi ini cuma dipakai satu
+                                             * dari bank itu. Efeknya satu pilihan pengawas
+                                             * tersimpan untuk SEMUA bank soal di grup, sehingga
+                                             * guru muncul sebagai pengawas ruang yang bukan
+                                             * miliknya (mis. ruang 7A ikut diisi untuk TEST8/TEST9).
+                                             *
+                                             * Sekarang: hanya jadwal yang punya peserta di
+                                             * ruang + sesi ini yang ikut disimpan.
+                                             */
                                             $listIdJad = [];
-                                            $total_peserta = 0;
+                                            $listBank = [];
+                                            $jadwalRuang = null;
                                             foreach ($jadwal as $jdw) {
-                                                $listIdJad[] = $jdw->id_jadwal;
+                                                $jml_peserta = 0;
                                                 $bank_kelass = $jdw->bank_kelas;
                                                 foreach ($bank_kelass as $bank_kelas) {
+                                                    if ($bank_kelas['kelas_id'] == null) continue;
                                                     foreach ($jdw->peserta as $peserta) {
-                                                        $cnt = isset($peserta[$ruang]) && isset($peserta[$ruang][$sesi->sesi_id]) ?
-                                                            count($peserta[$ruang][$sesi->sesi_id]) : 0;
-                                                        if ($bank_kelas['kelas_id'] != null && $cnt > 0) {
-                                                            $total_peserta += $cnt;
+                                                        if (isset($peserta[$ruang]) && isset($peserta[$ruang][$sesi->sesi_id])) {
+                                                            $jml_peserta += count($peserta[$ruang][$sesi->sesi_id]);
                                                         }
                                                     }
                                                 }
+                                                if ($jml_peserta > 0) {
+                                                    $listIdJad[] = $jdw->id_jadwal;
+                                                    $listBank[] = $jdw->bank_kode;
+                                                    if ($jadwalRuang === null) $jadwalRuang = $jdw;
+                                                }
                                             }
-                                            if ($total_peserta > 0) :
+                                            if ($jadwalRuang !== null) :
                                             ?>
                                             <tr>
-                                                <td class="text-center align-middle"><?= buat_tanggal(date('D, d M Y', strtotime($jadwal[0]->tgl_mulai))) ?></td>
+                                                <td class="text-center align-middle"><?= buat_tanggal(date('D, d M Y', strtotime($jadwalRuang->tgl_mulai))) ?></td>
                                                 <td class="text-center align-middle"><?= $sesi->nama_ruang ?></td>
                                                 <td class="text-center align-middle"><?= $sesi->nama_sesi ?></td>
                                                 <td class="text-center align-middle jadwal"
                                                     data-ruang="<?=$ruang?>" data-sesi="<?=$sesi->sesi_id?>"
-                                                    data-id="[<?= implode(',', $listIdJad) ?>]"><?= $jadwal[0]->nama_mapel ?></td>
+                                                    data-id="[<?= implode(',', $listIdJad) ?>]"><?= $jadwalRuang->nama_mapel ?>
+                                                    <br>
+                                                    <small class="text-muted"><?= implode(', ', $listBank) ?></small>
+                                                </td>
                                                 <td class="text-center align-middle">
                                                     <?php
                                                     $sel = '';
-                                                    $idJad = $jadwal[0]->id_jadwal;
+                                                    $idJad = $jadwalRuang->id_jadwal;
                                                     $sel = isset($pengawas[$idJad]) &&
                                                     isset($pengawas[$idJad][$ruang]) &&
                                                     isset($pengawas[$idJad][$ruang][$sesi->sesi_id])

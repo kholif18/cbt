@@ -136,7 +136,7 @@ $satuan = [
     var satuanPend = JSON.parse(JSON.stringify(<?= json_encode($satuan)?>));
     var namaSatuanPend = setting.satuan_pendidikan == 2 ? 'Madrasah' : 'Sekolah';
 
-    var nipKepsek = raporSetting != null && raporSetting.nip_kepsek === '1' ? setting.nip : '';
+    var nipKepsek = (raporSetting == null || raporSetting.nip_kepsek === '1') && setting.nip ? setting.nip : '';
     var nipWalas = raporSetting != null && raporSetting.nip_walikelas === '1' ? guru.nip : '';
 
     let model = '2';

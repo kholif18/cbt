@@ -86,7 +86,7 @@ if (isset($jadwal_ujian)) {
                             <td id="select-guru" class="d-none">
                                 <?php echo form_dropdown(
                                     'guru',
-                                    $gurus,
+                                    $gurus ?? [],
                                     $id_guru,
                                     'id="guru" class="sel form-control select2"'
                                 ); ?>

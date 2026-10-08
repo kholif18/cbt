@@ -22,6 +22,14 @@ $jadwal_selesai = [];
             <div class="row">
                 <div class="col-12">
                     <?php
+                    /* pesan dari controller, mis. sesi sudah berakhir / ujian ditutup otomatis */
+                    $pesanCbt = $this->session->flashdata('pesan');
+                    if (!empty($pesanCbt)) : ?>
+                        <div class="alert alert-warning alert-dismissible">
+                            <button type="button" class="close" data-dismiss="alert">&times;</button>
+                            <b><?= $pesanCbt ?></b>
+                        </div>
+                    <?php endif;
                     $cbt_setting = [];
                     $this->load->view('members/siswa/templates/top'); ?>
                 </div>
@@ -155,6 +163,38 @@ $jadwal_selesai = [];
                                                 $bg = 'bg-gradient-danger';
                                             }
                                             $jam_ke = $jadwal->jam_ke == '0' ? '1' : $jadwal->jam_ke;
+
+                                            /*
+                                             * Durasi yang ditampilkan harus sama dengan batas
+                                             * waktu di server: min(sisa durasi ujian, sisa jam
+                                             * sesi). Kalau tidak, siswa yang telat login
+                                             * masih melihat durasi penuh padahal akan
+                                             * dipaksa selesai saat jam sesi berakhir.
+                                             */
+                                            $durasiJadwal = (int)$jadwal->durasi_ujian;
+                                            $sisaDurasi = $durasiJadwal;
+                                            if ($durasi != null && $durasi->mulai != null
+                                                && $durasi->mulai != '' && $durasi->mulai != '0') {
+                                                $sisaDurasi = (int)floor((strtotime($durasi->mulai) + ($durasiJadwal * 60) - time()) / 60);
+                                            }
+                                            $pakaiSesi = false;
+                                            if ($cbt_info != null && $cbt_info->waktu_akhir != null && $cbt_info->waktu_akhir != '') {
+                                                /* tanggal batas sesi mengikuti tanggal ujian,
+                                                   bukan tanggal hari ini (ujian bisa lintas hari) */
+                                                $tglJadwal = !empty($jadwal->tgl_mulai) ? substr($jadwal->tgl_mulai, 0, 10) : date('Y-m-d');
+                                                $batasSesi = strtotime($tglJadwal . ' ' . $cbt_info->waktu_akhir);
+                                                /* sesi yang lewat tengah malam, mis. 23:00 - 01:00 */
+                                                if (!empty($cbt_info->waktu_mulai) && $batasSesi <= strtotime($tglJadwal . ' ' . $cbt_info->waktu_mulai)) {
+                                                    $batasSesi += 86400;
+                                                }
+                                                $sisaSesi = (int)floor(($batasSesi - time()) / 60);
+                                                if ($sisaSesi < $sisaDurasi) {
+                                                    $sisaDurasi = $sisaSesi;
+                                                    $pakaiSesi = true;
+                                                }
+                                            }
+                                            if ($sisaDurasi < 0) $sisaDurasi = 0;
+                                            $durasiTampil = $sisaDurasi;
                                             ?>
                                             <div class="jadwal-cbt col-md-6 col-lg-4">
                                                 <div class="card border">
@@ -163,10 +203,15 @@ $jadwal_selesai = [];
                                                             <b>Jam ke: <?= $jam_ke ?></b>
                                                         </div>
                                                         <div class="card-tools">
-                                                            <b><i class="fa fa-clock-o text-gray mr-1"></i><?= $jadwal->durasi_ujian ?>
-                                                                mnt</b>
+                                                            <b><i class="fa fa-clock-o text-gray mr-1"></i><?= $durasiTampil > 0 ? $durasiTampil . ' mnt' : 'Waktu habis' ?></b>
                                                         </div>
                                                     </div>
+                                                    <?php if ($pakaiSesi && $sisaDurasi > 0) : ?>
+                                                        <div class="card-body py-1 px-2">
+                                                            <small class="text-muted">sampai jam
+                                                                <?= substr($cbt_info->waktu_akhir, 0, 5) ?></small>
+                                                        </div>
+                                                    <?php endif; ?>
                                                     <div class="card-body p-0">
                                                         <div class="small-box <?= $bg ?> mb-0">
                                                             <div class="inner">

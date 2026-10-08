@@ -18,3 +18,8 @@ application/logs/*
 /orm/
 #/vendor/
 /nbproject/private/
+
+# --- Lokal: deploy GarudaCBT (bukan bagian upstream) ---
+/assets/bundle/
+/uploads/bank_soal/*
+!/uploads/bank_soal/index.html

@@ -155,9 +155,20 @@
 
             formDataMapel = null;
             $('#file-preview').html('<span class="text-center">Pastikan anda telah mengisi format yang telah disediakan.</span>')
-            const jsonData = await getDataFromExcel(files[0])
-            let tbl = $('<table class="table table-bordered w-100" />')
-            createTable(jsonData[jsonData.sheets[0]], tbl)
+            try {
+                const jsonData = await getDataFromExcel(files[0])
+                if (!jsonData || !jsonData.sheets || !jsonData.sheets.length) {
+                    $('#submit-excel').attr('disabled', 'disabled');
+                    toastPeringatan('File Excel tidak bisa dibaca. Gunakan file .xlsx hasil download template, bukan .xls atau .csv.');
+                    return;
+                }
+                let tbl = $('<table class="table table-bordered w-100" />')
+                createTable(jsonData[jsonData.sheets[0]], tbl)
+            } catch (err) {
+                console.log('gagal baca excel:', err);
+                $('#submit-excel').attr('disabled', 'disabled');
+                toastPeringatan('File Excel tidak bisa dibaca. Gunakan file .xlsx hasil download template, bukan .xls atau .csv.');
+            }
 
         });
 
@@ -347,8 +358,10 @@
                                             val = richToString(row.values[i])
                                         }
                                         if (i===3) {
-                                            val = val.replace("'", "")
-                                            console.log('index', i, val)
+                                            // Excel menyimpan angka sebagai number, bukan string.
+                                            // Tanpa String(), .replace() melempar TypeError dan
+                                            // seluruh parsing berhenti -> tombol Upload stuck.
+                                            val = String(val).replace("'", "")
                                         }
                                         obj[i] = val
                                     }
@@ -359,7 +372,9 @@
                             dataFiles[sheet.name] = cols
                         })
                         resolve(dataFiles)
-                    })
+                    }).catch(err => {
+                    reject(err)
+                })
                 } catch (err) {
                     reject(err)
                 }
@@ -446,6 +461,18 @@
         });
     }
      */
+    function toastPeringatan(pesan) {
+        $.toast({
+            heading: "File tidak bisa diproses",
+            text: pesan,
+            icon: 'warning',
+            showHideTransition: 'fade',
+            allowToastClose: true,
+            hideAfter: 8000,
+            position: 'top-right'
+        });
+    }
+
 
     function onRemoved() {
         $(".dropify-filename-inner").text("");

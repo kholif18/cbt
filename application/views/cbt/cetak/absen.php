@@ -139,6 +139,10 @@
                             </button>
                         </div>
                     </div>
+                    <div id="alert-pengawas" class="alert alert-warning d-none">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span id="alert-pengawas-text"></span>
+                    </div>
                     <hr>
                     <br>
                     <div class="d-flex justify-content-center bg-gray-light" style="min-height: 300mm">
@@ -231,6 +235,13 @@
             pengawas2 = data.info.pengawas.length > 1 ? data.info.pengawas[1].nama_guru : '';
             nip1 = data.info.pengawas.length > 0 ? data.info.pengawas[0].nip : '';
             nip2 = data.info.pengawas.length > 1 ? data.info.pengawas[1].nip : '';
+        }
+        if (pengawas1 === '') {
+            $('#alert-pengawas-text').text('Pengawas belum diatur untuk ' + kelasVal + ' / ' + sesi +
+                ' pada jadwal yang dipilih. Atur dulu di menu Atur Pengawas Ujian/Utamakan, atau pilih jadwal lain.');
+            $('#alert-pengawas').removeClass('d-none');
+        } else {
+            $('#alert-pengawas').addClass('d-none');
         }
 
         var card = '';
@@ -404,6 +415,40 @@
         var opsiRuang = $("#ruang");
         var opsiSesi = $("#sesi");
         var opsiKelas = $("#kelas");
+        var semuaOpsiJadwal = null;
+
+        function setJadwalTerfilter(peta) {
+            var terpilih = opsiJadwal.val();
+            var html = "<option value='' selected='selected'>Pilih Jadwal</option>";
+            var n = 0;
+            $.each(peta, function (id, v) {
+                n++;
+                html += "<option value='" + id + "'>" + v.mapel + " (" + v.kode + ")</option>";
+            });
+            if (n === 0) html += "<option value='' disabled>-- tidak ada jadwal di ruang ini --</option>";
+            opsiJadwal.html(html);
+            if (n > 0 && peta[terpilih]) opsiJadwal.val(terpilih);
+            opsiJadwal.trigger('change.select2');
+            opsiJadwal.trigger('change');
+        }
+
+        function filterJadwalPerRuang(ruang) {
+            if (printBy !== 1 || !ruang) {
+                opsiJadwal.html(semuaOpsiJadwal);
+                opsiJadwal.trigger('change.select2');
+                return;
+            }
+            $.ajax({
+                type: "GET",
+                url: base_url + "cbtcetak/jadwalperruang?ruang=" + ruang,
+                success: function (response) {
+                    setJadwalTerfilter(response);
+                },
+                error: function (xhr) {
+                    console.log("error", xhr.responseText);
+                }
+            });
+        }
 
         function loadSiswaRuang(ruang, sesi, jadwal) {
             var notempty = ruang && sesi && jadwal;
@@ -454,13 +499,14 @@
         opsiRuang.prepend("<option value='' selected='selected'>Pilih Ruang</option>");
         opsiSesi.prepend("<option value='' selected='selected'>Pilih Sesi</option>");
         opsiKelas.prepend("<option value='' selected='selected'>Pilih Kelas</option>");
+        semuaOpsiJadwal = opsiJadwal.html();
 
         opsiKelas.change(function () {
             loadSiswaKelas($(this).val(), opsiSesi.val(), opsiJadwal.val())
         });
 
         opsiRuang.change(function () {
-            loadSiswaRuang($(this).val(), opsiSesi.val(), opsiJadwal.val())
+            filterJadwalPerRuang($(this).val());
         });
 
         opsiSesi.change(function () {
@@ -578,11 +624,13 @@
                 $('#by-kelas').addClass('d-none');
                 $('#by-ruang').removeClass('d-none');
                 printBy = 1;
-                loadSiswaRuang(opsiRuang.val(), opsiSesi.val(), opsiJadwal.val())
+                filterJadwalPerRuang(opsiRuang.val());
             } else {
                 $('#by-kelas').removeClass('d-none');
                 $('#by-ruang').addClass('d-none');
                 printBy = 2;
+                opsiJadwal.html(semuaOpsiJadwal);
+                opsiJadwal.trigger('change.select2');
                 loadSiswaKelas(opsiKelas.val(), opsiSesi.val(), opsiJadwal.val())
             }
         });
