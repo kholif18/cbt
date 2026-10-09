@@ -26,9 +26,10 @@ public function cekHakStatus($jadwal, $ruang, $sesi)
   }
 }
 
-  /* Tombol admin di halaman status untuk menyembunyikan / menampilkan kembali
-     aksi "Paksa Selesai" bagi semua pengawas. Menyimpan ke cbt_setting_flag
-     supaya berlaku di semua server tanpa restart. */
+  /* Tombol admin di halaman status: menyalakan override tampil (menimpa
+     aturan 15 menit) atau melepasnya kembali ke aturan 15 menit, untuk semua
+     pengawas sekaligus. Menyimpan ke cbt_setting_flag supaya berlaku di semua
+     server tanpa restart. */
   public function togglePaksaSelesai()
   {
     if (!$this->ion_auth->is_admin()) {
@@ -38,15 +39,15 @@ public function cekHakStatus($jadwal, $ruang, $sesi)
 
     $this->load->helper('cbt_sesi');
 
-    $disembunyi = !cbt_paksa_selesai_disembunyikan(true);
-    cbt_simpan_paksa_selesai_disembunyikan($disembunyi, $this->ion_auth->user()->username);
+    $tampil = !cbt_paksa_tampil_dipaksa(true);
+    cbt_simpan_paksa_tampil_dipaksa($tampil, $this->ion_auth->user()->row()->username);
 
     $this->output_json([
       'status' => 1,
-      'disembunyi' => $disembunyi,
-      'pesan' => $disembunyi
-        ? 'Aksi Paksa Selesai disembunyikan dari semua pengawas.'
-        : 'Aksi Paksa Selesai kembali tampil untuk pengawas.',
+      'tampil' => $tampil,
+      'pesan' => $tampil
+        ? 'Override aktif: Paksa Selesai langsung tampil untuk semua pengawas.'
+        : 'Override dilepas: Paksa Selesai kembali mengikuti aturan 15 menit sebelum selesai.',
     ]);
   }
 

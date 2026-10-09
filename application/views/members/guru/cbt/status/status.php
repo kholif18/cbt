@@ -31,19 +31,27 @@
                 </div>
                 <?php
                 $dnone = in_array($guru->id_guru, $ids_pengawas) ? '' : 'd-none';
-                /* Menu "Paksa Selesai" untuk pengawas disembunyikan, lalu muncul
-                   otomatis saat sisa waktu ke jam akhir sesi < 15 menit.
+                /* Kolom "Paksa Selesai" untuk pengawas tampil otomatis saat
+                   sisa waktu ke jam akhir sesi < 15 menit; override admin
+                   (tampil_paksa_selesai) menimpa aturan itu.
                    Halaman admin tidak memakai aturan ini. */
                 $this->load->helper('cbt_sesi');
                 /* Pakai tanggal hari ini, bukan tgl_mulai jadwal: halaman status
                    dipakai saat ujian berjalan, dan tgl_mulai bisa sudah
                    kedaluwarsa sehingga jam sesi selalu terbaca "lewat". */
                 $petaSesi = cbt_peta_sesi_batas(date('Y-m-d'));
-                /* Hanya kolom Paksa Selesai yang bisa disembunyikan admin.
+                $bukaOtomatis = false;
+                foreach ($siswa as $sw) {
+                    if (isset($sw->kode_sesi) && cbt_buka_paksa_sesi($petaSesi, $sw->kode_sesi)) {
+                        $bukaOtomatis = true;
+                        break;
+                    }
+                }
+                /* Hanya kolom Paksa Selesai yang bisa dikontrol admin.
                    $dnone di atas mengatur kelima kolom aksi sekaligus, jadi
                    tidak boleh dipakai di sini, kalau tidak Reset Waktu,
                    Reset Izin, dan Ulang ikut hilang. */
-                $forceHide = ($dnone !== '' || cbt_paksa_selesai_disembunyikan());
+                $forceHide = ($dnone !== '') || !(cbt_paksa_tampil_dipaksa() || $bukaOtomatis);
                 ?>
                 <div class="card-body">
                     <div class="row">
@@ -60,6 +68,10 @@
                         </div>
                     </div>
                     <hr>
+                    <div class="alert alert-default-warning border-warning mb-3 d-none" id="banner-kuota-reset">
+                        <h6 class="mb-1"><i class="icon fas fa-balance-scale"></i> Kuota Reset Izin</h6>
+                        <div id="isi-kuota-reset">Memuat kuota...</div>
+                    </div>
                     <div class="row" id="info">
                         <div class="col-md-5">
                             <div class="alert alert-default-success border-success">
@@ -115,13 +127,15 @@
                                         </li>
                                         <li>
                                             Aksi <b>RESET IZIN</b> untuk mengizinkkan siswa mengerjakan ujian di
-                                            perangkat berbeda.
+                                            perangkat berbeda. Pengawas dibatasi <b>3 kali</b> per jadwal dengan
+                                            jeda <b>15 menit</b> antar reset.
                                         </li>
                                         <li>
                                             Aksi <b>PAKSA SELESAI</b> untuk memaksa siswa menyelesaikan ujian.
                                         </li>
                                         <li>
-                                            Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal.
+                                            Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal, sekaligus
+                                            mengembalikan kuota reset izin menjadi 3 kali lagi.
                                         </li>
                                         <li>
                                             <span class="badge badge-success"><i class="fa fa-check ml-1 mr-1"></i> Terapkan Aksi</span>
@@ -142,11 +156,6 @@
                                 <label><input type="search" id="cari-status-siswa"
                                               class="form-control form-control-sm" placeholder="Cari">
                                 </label>
-                                <button type="button" class="ml-2 btn btn-warning d-none" id="toggle-force"
-                                        data-toggle="tooltip"
-                                        title="Tampilkan menu Paksa Selesai untuk siswa terpilih">
-                                    <i class="fa fa-unlock ml-1 mr-1"></i> Tampilkan Paksa Selesai
-                                </button>
                                 <button type="button" class="ml-2 btn btn-success <?= $dnone ?>"
                                         onclick="terapkanAksi()"
                                         data-toggle="tooltip"
@@ -353,15 +362,13 @@
     var dnone = isPengawas == "1" ? '' : 'd-none';
 
     /* Gating menu "Paksa Selesai" untuk pengawas: kolom disembunyikan, muncul
-       otomatis saat sisa waktu ke jam akhir sesi < 15 menit, atau saat dibuka
-       manual lewat tombol "Tampilkan Paksa Selesai". */
+       otomatis saat sisa waktu ke jam akhir sesi < 15 menit, kecuali admin
+       menyalakan override tampil lewat tombol di halaman admin. */
     const PETA_SESI = <?= json_encode($petaSesi, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const AMBANG_PAKSA_SELESAI = <?= AMBANG_PAKSA_SELESAI_DETIK ?>;
-    /* Admin bisa menyembunyikan aksi Paksa Selesai dari semua pengawas lewat
-       tombol di halaman admin. Kalau aktif, kolom ini tidak boleh dibuka,
-       termasuk secara otomatis saat sisa waktu < 15 menit. */
-    const PAKSA_DISEMBUNYIKAN_ADMIN = <?= cbt_paksa_selesai_disembunyikan() ? '1' : '0' ?>;
-    let forceDibukaManual = false;
+    /* Override admin: '1' = kolom tampil kapan pun (menimpa aturan 15 menit),
+       '0' = ikuti aturan 15 menit. */
+    const PAKSA_TAMPIL_DIPAKSA = <?= cbt_paksa_tampil_dipaksa() ? '1' : '0' ?>;
 
     function sisaSesi(kodeSesi) {
         const p = PETA_SESI[kodeSesi];
@@ -380,12 +387,11 @@
     }
 
     function forceKolomTerbuka() {
-        return PAKSA_DISEMBUNYIKAN_ADMIN != '1' && !$('#th-force').hasClass('d-none');
+        return PAKSA_TAMPIL_DIPAKSA == '1' || !$('#th-force').hasClass('d-none');
     }
 
     function terapkanVisibilitasPaksa() {
-        const otomatis = PAKSA_DISEMBUNYIKAN_ADMIN != '1' && forceOtomatisTerbuka();
-        const buka = PAKSA_DISEMBUNYIKAN_ADMIN != '1' && (forceDibukaManual || otomatis);
+        const buka = PAKSA_TAMPIL_DIPAKSA == '1' || forceOtomatisTerbuka();
 
         $('#th-force').toggleClass('d-none', !buka);
         $('#table-status').find('.force-col[data-sesi]').toggleClass('d-none', !buka);
@@ -397,20 +403,82 @@
             $('#input-force-all').prop('checked', false).addClass('d-none');
             $('#table-status').find('.input-force').prop('checked', false);
         }
+    }
 
-        // tombol: tampil saat kolom tertutup (untuk buka manual), atau saat kolom
-        // dibuka manual tapi belum masuk window <15 menit (untuk ditutup lagi).
-        // Saat otomatis (<15 menit) kolom wajib terbuka dan tidak bisa ditutup.
-        const tombol = $('#toggle-force');
-        let tampilTombol = false, label = '';
-        if (!buka) {
-            tampilTombol = true;
-            label = '<i class="fa fa-unlock ml-1 mr-1"></i> Tampilkan Paksa Selesai';
-        } else if (forceDibukaManual && !otomatis) {
-            tampilTombol = true;
-            label = '<i class="fa fa-lock ml-1 mr-1"></i> Sembunyikan Paksa Selesai';
+    /* Kuota reset izin pengawas: banner + penguncian kolom Reset Izin saat
+       kuota habis atau jeda 15 menit belum lewat. Data dari server. */
+    let kuotaReset = null;
+
+    function muatKuotaReset() {
+        $.getJSON(base_url + 'siswa/statusresetizin?jadwal=' + jadwal, function (d) {
+            if (d.status != 1) {
+                $('#banner-kuota-reset').addClass('d-none');
+                return;
+            }
+            kuotaReset = d;
+            renderKuotaReset();
+            kunciKolomReset();
+        });
+    }
+
+    function fmtDetik(d) {
+        d = Math.max(0, parseInt(d) || 0);
+        const m = Math.floor(d / 60), s = d % 60;
+        return m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    function renderKuotaReset() {
+        if (!kuotaReset) return;
+        let teks;
+        if (kuotaReset.admin) {
+            teks = '<b>Admin</b> &mdash; reset izin tanpa batas, tetapi tetap dicatat.';
+            if (kuotaReset.kuota_semua && kuotaReset.kuota_semua.length) {
+                teks += '<br><small>' + kuotaReset.kuota_semua.map(function (r) {
+                    return 'User #' + r.id_user + ': ' + (parseInt(r.jml_reset) || 0) + 'x';
+                }).join(' &middot; ') + '</small>';
+            }
+        } else {
+            const k = kuotaReset.kuota;
+            teks = 'Terpakai <b>' + k.jml + '/' + k.maks + '</b>, sisa <b>' + k.sisa
+                + '</b> kali reset izin.';
+            if (k.jeda_detik > 0) {
+                teks += ' Jeda 15 menit: tersedia lagi dalam <b class="hitung-jeda">'
+                    + fmtDetik(k.jeda_detik) + '</b>.';
+            }
+            teks += '<br><small>Aksi <b>Ulang</b> mengembalikan kuota menjadi '
+                + k.maks + ' kali lagi.</small>';
         }
-        tombol.toggleClass('d-none', !tampilTombol || isPengawas != "1" || PAKSA_DISEMBUNYIKAN_ADMIN == '1').html(label);
+        $('#isi-kuota-reset').html(teks);
+        $('#banner-kuota-reset').removeClass('d-none');
+    }
+
+    /* Kunci kolom Reset Izin (dan centang-all) selama kuota habis / jeda.
+       Status disabled bawaan tiap baris tetap disimpan supaya tidak salah
+       membuka checkbox yang memang tidak boleh dipakai. */
+    function kunciKolomReset() {
+        const kunci = kuotaReset != null && !kuotaReset.admin
+            && (parseInt(kuotaReset.kuota.sisa) <= 0 || parseInt(kuotaReset.kuota.jeda_detik) > 0);
+        $('#table-status').find('.input-reset').each(function () {
+            if (this.dataset.asli === undefined) {
+                this.dataset.asli = this.disabled ? '1' : '0';
+            }
+            if (kunci) this.checked = false;
+            this.disabled = kunci || this.dataset.asli === '1';
+        });
+        if (kunci) $('#input-reset-all').prop('checked', false);
+        $('#input-reset-all').prop('disabled', kunci);
+    }
+
+    function jedaBerdetak() {
+        if (!kuotaReset || kuotaReset.admin) return;
+        const jeda = parseInt(kuotaReset.kuota.jeda_detik) || 0;
+        if (jeda <= 0) return;
+        kuotaReset.kuota.jeda_detik = jeda - 1;
+        $('.hitung-jeda').text(fmtDetik(kuotaReset.kuota.jeda_detik));
+        if (kuotaReset.kuota.jeda_detik <= 0) {
+            renderKuotaReset();
+            kunciKolomReset();
+        }
     }
 
     function terapkanAksi() {
@@ -472,6 +540,10 @@
                         window.location.reload()
                     }, error: function (xhr, status, error) {
                         console.log(xhr.responseText);
+                        const pesan = xhr.responseJSON && xhr.responseJSON.pesan
+                            ? xhr.responseJSON.pesan : 'Permintaan ditolak oleh server.';
+                        showDangerToast(pesan);
+                        muatKuotaReset();
                     }
                 });
             }
@@ -488,16 +560,13 @@
         var idSiswa = '';
         var idJadwal = '';
 
-        // gating "Paksa Selesai" + tombol tampilkan
+        // gating "Paksa Selesai" (override admin / aturan 15 menit)
         terapkanVisibilitasPaksa();
         setInterval(terapkanVisibilitasPaksa, 30000);
 
-        $('#toggle-force').on('click', function () {
-            // saat sesi tinggal <15 menit kolom wajib terbuka, tidak bisa ditutup
-            if (forceOtomatisTerbuka()) return;
-            forceDibukaManual = !forceDibukaManual;
-            terapkanVisibilitasPaksa();
-        });
+        // kuota reset izin: muat sekali lalu hitung mundur jeda tiap detik
+        muatKuotaReset();
+        setInterval(jedaBerdetak, 1000);
 
         $('#cari-status-siswa').quicksearch('#table-status tbody tr');
 

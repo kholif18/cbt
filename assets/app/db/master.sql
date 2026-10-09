@@ -436,6 +436,20 @@ CREATE TABLE `cbt_rekap_nilai` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `cbt_reset_izin`
+--
+
+CREATE TABLE `cbt_reset_izin` (
+  `id` int NOT NULL,
+  `id_user` int NOT NULL,
+  `id_jadwal` int NOT NULL,
+  `jml_reset` int NOT NULL DEFAULT '0',
+  `reset_terakhir` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `cbt_ruang`
 --
 
@@ -945,7 +959,8 @@ CREATE TABLE `log_ujian` (
   `agent` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `device` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `reset` int NOT NULL COMMENT '0=tidak reset, 1=reset',
-  `finish_time` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL
+  `finish_time` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `jml_reset` int NOT NULL DEFAULT '0' COMMENT 'berapa kali siswa ini pernah direset izinnya'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC;
 
 -- --------------------------------------------------------
@@ -1815,6 +1830,13 @@ ALTER TABLE `cbt_rekap_nilai`
   ADD PRIMARY KEY (`id_rekap_nilai`) USING BTREE;
 
 --
+-- Indeks untuk tabel `cbt_reset_izin`
+--
+ALTER TABLE `cbt_reset_izin`
+  ADD PRIMARY KEY (`id`) USING BTREE,
+  ADD UNIQUE KEY `uniq_user_jadwal` (`id_user`,`id_jadwal`) USING BTREE;
+
+--
 -- Indeks untuk tabel `cbt_ruang`
 --
 ALTER TABLE `cbt_ruang`
@@ -2233,6 +2255,12 @@ ALTER TABLE `cbt_rekap`
 --
 ALTER TABLE `cbt_rekap_nilai`
   MODIFY `id_rekap_nilai` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `cbt_reset_izin`
+--
+ALTER TABLE `cbt_reset_izin`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT untuk tabel `cbt_ruang`

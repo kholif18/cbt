@@ -1632,6 +1632,44 @@
       "primary_key": 0
     }
   ],
+  "cbt_reset_izin": [
+    {
+      "name": "id",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 1,
+      "auto_increment": true
+    },
+    {
+      "name": "id_user",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 0
+    },
+    {
+      "name": "id_jadwal",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 0
+    },
+    {
+      "name": "jml_reset",
+      "type": "int",
+      "max_length": 11,
+      "default": "0",
+      "primary_key": 0
+    },
+    {
+      "name": "reset_terakhir",
+      "type": "datetime",
+      "max_length": null,
+      "default": null,
+      "primary_key": 0
+    }
+  ],
   "cbt_ruang": [
     {
       "name": "id_ruang",
@@ -3200,6 +3238,13 @@
       "type": "varchar",
       "max_length": 20,
       "default": null,
+      "primary_key": 0
+    },
+    {
+      "name": "jml_reset",
+      "type": "int",
+      "max_length": 1,
+      "default": "0",
       "primary_key": 0
     }
   ],

@@ -135,6 +135,7 @@
 <?= form_close() ?>
 
 <script src="<?= base_url() ?>/assets/app/js/redirect.js"></script>
+<script src="<?= base_url() ?>/assets/app/js/fullscreen-guard.js?v=1"></script>
 <script src="<?= base_url() ?>/assets/app/js/linker-list.js"></script>
 <script src="<?= base_url() ?>/assets/plugins/element-queries/ElementQueries.js"></script>
 <script src="<?= base_url() ?>/assets/plugins/element-queries/ResizeSensor.js"></script>
@@ -195,6 +196,7 @@
         });
 
         document.onmousedown = rtclickcheck;
+        CbtFsGuard.pasang();
         swal.fire({
             title: 'Peraturan Ujian',
             html: 'Kerjakan soal dengan serius,<br>jangan nyontek!',
@@ -206,6 +208,11 @@
         }).then((result) => {
             if (result.value) {
                 openFullscreen();
+                /* kalau dalam 3 detik tidak juga masuk fullscreen, tutup
+                   layar supaya siswa wajib menekan tombol kembali */
+                setTimeout(function () {
+                    CbtFsGuard.paksa();
+                }, 3000);
             }
         });
 
@@ -974,6 +981,9 @@
             return false;
         }
     }
+
+    /* Blokir siswa keluar layar penuh dipindah ke assets/app/js/fullscreen-guard.js
+       (CbtFsGuard) supaya halaman konfirmasi bisa memakai logika yang sama. */
 
     function openFullscreen() {
         if (elem.requestFullscreen) {

@@ -25,8 +25,8 @@ $config['uri_protocol']	= 'REQUEST_URI';
 $config['url_suffix'] = '';
 $config['language']	= 'indonesian';
 $config['charset'] = 'UTF-8';
-$config['enable_hooks'] = FALSE;
-//$config['enable_hooks'] = TRUE;
+$config['enable_hooks'] = TRUE;
+//$config['enable_hooks'] = FALSE;
 $config['subclass_prefix'] = 'MY_';
 
 $config['composer_autoload'] = FALSE;

@@ -82,13 +82,16 @@ function cbt_buka_paksa_sesi($petaSesi, $kodeSesi)
 }
 
 /**
- * true bila admin menyembunyikan aksi Paksa Selesai dari semua pengawas.
+ * true bila admin menimpa aturan 15 menit dengan override "tampil selalu"
+ * untuk aksi Paksa Selesai.
  *
- * Flag disimpan di tabel cbt_setting_flag (bukan di config file) supaya
- * langsung berlaku tanpa restart, dan tetap berlaku lintas server.
+ * false (bawaan) = kolom Paksa Selesai di halaman pengawas mengikuti aturan
+ * muncul 15 menit sebelum jam akhir sesi; true = tampil kapan pun, menimpa
+ * aturan itu. Flag disimpan di tabel cbt_setting_flag (bukan di config file)
+ * supaya langsung berlaku tanpa restart, dan tetap berlaku lintas server.
  * Nilai di-cache per-request karena dipakai banyak kali saat render.
  */
-function cbt_paksa_selesai_disembunyikan($refresh = false)
+function cbt_paksa_tampil_dipaksa($refresh = false)
 {
     static $cache = null;
 
@@ -99,7 +102,7 @@ function cbt_paksa_selesai_disembunyikan($refresh = false)
     $CI =& get_instance();
     $row = $CI->db->select('nilai')
         ->from('cbt_setting_flag')
-        ->where('kode', 'sembunyi_paksa_selesai')
+        ->where('kode', 'tampil_paksa_selesai')
         ->limit(1)
         ->get()
         ->row();
@@ -110,21 +113,87 @@ function cbt_paksa_selesai_disembunyikan($refresh = false)
 }
 
 /**
- * Simpan status aksi Paksa Selesai untuk pengawas, lalu segarkan cache.
+ * Simpan override tampil / aturan 15 menit untuk pengawas.
  * $oleh = username admin pemicu, disimpan untuk jejak audit.
  */
-function cbt_simpan_paksa_selesai_disembunyikan($disembunyi, $oleh = null)
+function cbt_simpan_paksa_tampil_dipaksa($tampil, $oleh = null)
 {
     $CI =& get_instance();
-    $nilai = $disembunyi ? '1' : '0';
+    $nilai = $tampil ? '1' : '0';
 
-    $CI->db->where('kode', 'sembunyi_paksa_selesai')->update('cbt_setting_flag', [
+    $ada = $CI->db->select('kode')
+        ->from('cbt_setting_flag')
+        ->where('kode', 'tampil_paksa_selesai')
+        ->limit(1)
+        ->get()
+        ->row() != null;
+
+    $isi = [
         'nilai' => $nilai,
         'diubah' => date('Y-m-d H:i:s'),
         'diubah_oleh' => $oleh,
-    ]);
+    ];
 
-    cbt_paksa_selesai_disembunyikan(true);
+    if ($ada) {
+        $CI->db->where('kode', 'tampil_paksa_selesai')->update('cbt_setting_flag', $isi);
+    } else {
+        $isi['kode'] = 'tampil_paksa_selesai';
+        $CI->db->insert('cbt_setting_flag', $isi);
+    }
 
-    return $disembunyi;
+    cbt_paksa_tampil_dipaksa(true);
+
+    return $tampil;
+}
+
+/**
+ * true bila ada sesi pada jadwal tersebut yang sisa waktunya sampai jam akhir
+ * sesi tinggal < AMBANG_PAKSA_SELESAI_DETIK (jendela "muncul 15 menit sebelum
+ * selesai"). Dipakai server untuk menegakkan aturan yang sama dengan yang
+ * tampil di halaman pengawas, supaya request manual tidak menembusnya.
+ * Basis: cbt_pengawas.id_sesi (boleh CSV, angka id_sesi) dipetakan ke
+ * cbt_sesi, lalu ke peta batas hari ini.
+ */
+function cbt_jendela_paksa_terbuka($id_jadwal)
+{
+    if ($id_jadwal == null || $id_jadwal <= 0) {
+        return false;
+    }
+
+    $CI =& get_instance();
+    $baris = $CI->db->select('id_sesi')
+        ->from('cbt_pengawas')
+        ->where('id_jadwal', $id_jadwal)
+        ->get()
+        ->result();
+    if (!$baris) {
+        return false;
+    }
+
+    /* petakan id_sesi maupun kode_sesi apa adanya */
+    $petaKode = [];
+    foreach ($CI->db->select('id_sesi, kode_sesi')
+        ->from('cbt_sesi')
+        ->where('aktif', 1)
+        ->get()
+        ->result() as $s) {
+        $petaKode[(string) $s->id_sesi] = $s->kode_sesi;
+        $petaKode[(string) $s->kode_sesi] = $s->kode_sesi;
+    }
+
+    $peta = cbt_peta_sesi_batas(date('Y-m-d'));
+    foreach ($baris as $b) {
+        foreach (explode(',', (string) $b->id_sesi) as $v) {
+            $v = trim($v);
+            if ($v === '') {
+                continue;
+            }
+            $kode = isset($petaKode[$v]) ? $petaKode[$v] : $v;
+            if (cbt_buka_paksa_sesi($peta, $kode)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }

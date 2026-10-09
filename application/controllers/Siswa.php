@@ -31,7 +31,9 @@ private function paksaSelesaiUjian($id_siswa, $id_jadwal)
 }
 
   /* Aksi "Paksa Selesai" hanya untuk admin, atau pengawas resmi pada jadwal
-     tersebut selama admin belum menyembunyikannya dari pengawas.
+     tersebut. Override admin (tampil_paksa_selesai) menimpa aturan 15 menit:
+     aktif -> pengawas boleh kapan saja; nonaktif -> hanya dalam jendela 15
+     menit terakhir sebelum jam akhir sesi.
      applyAction() tidak pernah memeriksa peran pemanggil, jadi menyembunyikan
      tombol di layar saja tidak cukup: request yang dibuat manual tetap akan
      mengubah data ujian. */
@@ -41,10 +43,14 @@ private function paksaSelesaiUjian($id_siswa, $id_jadwal)
 
     $CI =& get_instance();
     $CI->load->helper('cbt_sesi');
-    if (cbt_paksa_selesai_disembunyikan()) return false;
+    if ($id_jadwal <= 0) return false;
 
-    $user = $this->ion_auth->user();
-    if ($user == null || $id_jadwal <= 0) return false;
+    $user = $this->ion_auth->user()->row();
+    if ($user == null) return false;
+
+    /* users tidak punya id_guru: ambil lewat master_guru.id_user */
+    $guru = $CI->db->where('id_user', $user->id)->get('master_guru')->row();
+    if ($guru == null) return false;
 
     /* id_guru pada cbt_pengawas boleh berisi beberapa id dipisah koma */
     $pengawas = $this->db->select('id_guru')
@@ -53,13 +59,16 @@ private function paksaSelesaiUjian($id_siswa, $id_jadwal)
       ->get()
       ->result();
 
+    $ada = false;
     foreach ($pengawas as $p) {
       foreach (explode(',', (string) $p->id_guru) as $g) {
-        if ((int) trim($g) === (int) $user->id_guru) return true;
+        if ((int) trim($g) === (int) $guru->id_guru) $ada = true;
       }
     }
+    if (!$ada) return false;
 
-    return false;
+    if (cbt_paksa_tampil_dipaksa()) return true;
+    return cbt_jendela_paksa_terbuka($id_jadwal);
   }
 
   /* Dipanggil paling awal di applyAction(). Menolak seluruh request kalau
@@ -170,6 +179,57 @@ private function paksaSelesaiUjian($id_siswa, $id_jadwal)
   {
     @file_put_contents(APPPATH . "logs/sweep_batas_waktu.log",
       "[" . date("Y-m-d H:i:s") . "] " . $pesan . PHP_EOL, FILE_APPEND);
+  }
+
+  /*  Kuota reset izin + jumlah reset per siswa untuk halaman status.
+      GET siswa/statusresetizin?jadwal=ID  */
+  public function statusResetIzin()
+  {
+    date_default_timezone_set("Asia/Jakarta");
+    if (!class_exists("CbtGuard", false)) {
+      require_once APPPATH . "hooks/CbtGuard.php";
+    }
+
+    $id_jadwal = (int) $this->input->get("jadwal");
+    if ($id_jadwal <= 0) {
+      $id_jadwal = (int) $this->input->post("jadwal");
+    }
+
+    $user = $this->ion_auth->user()->row();
+    if ($user == null || $id_jadwal <= 0) {
+      $this->output_json(array("status" => 0, "pesan" => "Data tidak valid."));
+      return;
+    }
+
+    $admin = $this->ion_auth->is_admin();
+    if (!$admin && !CbtGuard::pengawasJadwal($this, $user->id, $id_jadwal)) {
+      $this->output_json(array("status" => 0,
+        "pesan" => "Anda bukan pengawas jadwal ini."));
+      return;
+    }
+
+    $baris = $this->db->select("id_siswa, jml_reset")
+      ->where("id_jadwal", $id_jadwal)
+      ->where("jml_reset >", 0)
+      ->get("log_ujian")->result();
+    $hitungan = array();
+    foreach ($baris as $b) {
+      $hitungan[(string) $b->id_siswa] = (int) $b->jml_reset;
+    }
+
+    $data = array(
+      "status" => 1,
+      "admin" => (bool) $admin,
+      "kuota" => CbtGuard::bacaKuota($this, $user->id, $id_jadwal),
+      "siswa_counts" => $hitungan,
+    );
+    if ($admin) {
+      $data["kuota_semua"] = $this->db
+        ->select("id_user, jml_reset, reset_terakhir")
+        ->where("id_jadwal", $id_jadwal)
+        ->get("cbt_reset_izin")->result();
+    }
+    $this->output_json($data);
   }
 
 }

@@ -11,6 +11,10 @@ class Db_log
     function logQueries()
     {
         $CI = & get_instance();
+        // hanya tulis log bila debug query diaktifkan lewat session garudacbt_log
+        if (!$CI->session->userdata('garudacbt_log')) {
+            return;
+        }
         $filepath = APPPATH . 'logs/hook-' . $CI->session->userdata('garudacbt_log') . "-". date('d-M-Y') . '.txt';  // Buat file query log dengan tgl hari ini di folder application/logs
         $handle = fopen($filepath, "a+"); // buka file dg mode Read/write
         $times = $CI->db->query_times;    // ambil waktu eksekusi dari semua query yg di eksekusi oleh controller

@@ -6,10 +6,10 @@
  * Time: 17:20
  */
 
-/* Status aksi Paksa Selesai untuk pengawas disimpan di tabel cbt_setting_flag
-   supaya berlaku di semua server tanpa perlu restart. */
+/* Override tampil / aturan 15 menit untuk aksi Paksa Selesai disimpan di
+   tabel cbt_setting_flag supaya berlaku di semua server tanpa restart. */
 $this->load->helper('cbt_sesi');
-$paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
+$paksaTampil = cbt_paksa_tampil_dipaksa();
 ?>
 
 <div class="content-wrapper bg-white">
@@ -33,15 +33,17 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
                     </button>
                     <?php
                     /* Tombol ini sengaja kecil dan tidak mencolok: menyetel hak
-                       akses pengawas bukan aksi harian. Hanya admin yang boleh. */
+                       akses pengawas bukan aksi harian. Hanya admin yang boleh.
+                       Dua state: override tampil (menimpa aturan 15 menit) atau
+                       aturan 15 menit berjalan kembali. */
                     if ($this->ion_auth->is_admin()) {
                         ?>
                         <button type="button" class="card-tools btn btn-outline-secondary btn-sm ml-2"
                                 id="btn-sembunyi-paksa" data-toggle="tooltip"
-                                title="Sembunyikan atau tampilkan aksi Paksa Selesai untuk semua pengawas">
-                            <i class="fas <?= $paksaDisembunyi ? 'fa-eye' : 'fa-eye-slash' ?> mr-1"></i>
+                                title="Atur tampilan aksi Paksa Selesai untuk semua pengawas">
+                            <i class="fas <?= $paksaTampil ? 'fa-undo' : 'fa-eye' ?> mr-1"></i>
                             <span id="label-sembunyi-paksa"
-                                  data-state="<?= $paksaDisembunyi ? '1' : '0' ?>"><?= $paksaDisembunyi ? 'Tampilkan Paksa Selesai ke Pengawas' : 'Sembunyikan Paksa Selesai dari Pengawas' ?></span>
+                                  data-state="<?= $paksaTampil ? '1' : '0' ?>"><?= $paksaTampil ? 'Kembalikan Paksa Selesai ke Aturan 15 Menit' : 'Tampilkan Paksa Selesai ke Pengawas' ?></span>
                         </button>
                     <?php } ?>
                 </div>
@@ -128,13 +130,16 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
                                         </li>
                                         <li>
                                             Aksi <b>RESET IZIN</b> untuk mengizinkkan siswa mengerjakan ujian di
-                                            perangkat berbeda.
+                                            perangkat berbeda. Pengawas dibatasi <b>3 kali</b> per jadwal dengan
+                                            jeda <b>15 menit</b>; admin tanpa batas tetapi tetap dicatat
+                                            (kolom <b>Jml Reset Izin</b>).
                                         </li>
                                         <li>
                                             Aksi <b>PAKSA SELESAI</b> untuk memaksa siswa menyelesaikan ujian.
                                         </li>
                                         <li>
-                                            Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal.
+                                            Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal, sekaligus
+                                            mengembalikan kuota reset izin pengawas menjadi 3 kali lagi.
                                         </li>
                                         <li>
                                             <span class="badge badge-success"><i class="fa fa-check ml-1 mr-1"></i> Terapkan Aksi</span>
@@ -271,6 +276,26 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
     var kelas;
     var jadwal, ruang, sesi;
 
+    /* Jumlah reset izin per siswa (dari siswa/statusresetizin) untuk kolom
+       "Jml Reset Izin". Diambil tiap tabel dirender, lalu mengisi span yang
+       sudah ada supaya tidak ada balapan antar request. */
+    var hitunganReset = {};
+
+    function muatHitunganReset(idJadwal) {
+        if (!idJadwal) return;
+        $.getJSON(base_url + 'siswa/statusresetizin?jadwal=' + idJadwal, function (d) {
+            hitunganReset = (d.status == 1 && d.siswa_counts) ? d.siswa_counts : {};
+            renderHitunganReset();
+        });
+    }
+
+    function renderHitunganReset() {
+        $('#table-status').find('.jml-reset-izin').each(function () {
+            const n = parseInt(hitunganReset[String($(this).data('siswa'))]) || 0;
+            $(this).text(n > 0 ? n + 'x' : '-');
+        });
+    }
+
     function terapkanAksi() {
         const $rows = $('#table-status').find('tr'), headers = $rows.splice(0, 2);
         let item = {};
@@ -336,6 +361,9 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
                         refreshStatus();
                     }, error: function (xhr, status, error) {
                         console.log(xhr.responseText);
+                        const pesan = xhr.responseJSON && xhr.responseJSON.pesan
+                            ? xhr.responseJSON.pesan : 'Permintaan ditolak oleh server.';
+                        showDangerToast(pesan);
                     }
                 });
             }
@@ -352,6 +380,7 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
                 success: function (response) {
                     console.log(response);
                     createPreview(response)
+                    muatHitunganReset(response.info ? response.info.id_jadwal : null);
                 }
             });
         }, 500);
@@ -369,6 +398,7 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
             '<th colspan="2" class="text-center align-middle">Status</th>' +
             '<th rowspan="2" class="text-center align-middle ' + dnone + '">Reset<br>Waktu</th>' +
             '<th colspan="3" class="text-center align-middle ' + dnone + '">Aksi</th>' +
+            '<th rowspan="2" class="text-center align-middle ' + dnone + '">Jml<br>Reset<br>Izin</th>' +
             '</tr>' +
             '<tr>' +
             '<th class="text-center align-middle p-1">Mulai</th>' +
@@ -446,10 +476,13 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
                     '<td class="text-center text-danger align-middle ' + dnone + '">' +
                     '<input class="check input-ulang" type="checkbox" ' + disabledUlang + '>' +
                     '</td>' +
+                    '<td class="text-center align-middle ' + dnone + '">' +
+                    '<span class="jml-reset-izin" data-siswa="' + idSiswa + '">-</span>' +
+                    '</td>' +
                     '</tr>';
             }
         } else {
-            tbody += '<tr><td colspan="12" class="text-center">Tidak ada siswa tergabung disini!</td></tr>'
+            tbody += '<tr><td colspan="13" class="text-center">Tidak ada siswa tergabung disini!</td></tr>'
         }
 
         tbody += '</tbody>';
@@ -534,6 +567,7 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
         });
 
         $('#cari-status-siswa').quicksearch('#table-status tbody tr');
+        renderHitunganReset();
     }
 
     function getDetailJadwal(idJadwal) {
@@ -555,17 +589,20 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
         });
     }
 
-    /* Tombol admin untuk menyembunyikan / menampilkan kembali aksi Paksa
-       Selesai bagi semua pengawas. Hanya menyentuh kolom Paksa Selesai:
-       Reset Waktu, Reset Izin, dan Ulang tetap terbuka untuk pengawas. */
+    /* Tombol admin: menyalakan override tampil (menimpa aturan 15 menit) atau
+       melepasnya kembali ke aturan 15 menit bagi semua pengawas. Hanya menyentuh
+       kolom Paksa Selesai: Reset Waktu, Reset Izin, dan Ulang tetap terbuka
+       untuk pengawas. */
     function togglePaksaSelesai() {
-        var disembunyi = $('#label-sembunyi-paksa').data('state') === '1';
-        var judul = disembunyi ? 'Tampilkan Paksa Selesai?' : 'Sembunyikan Paksa Selesai?';
-        var pesan = disembunyi
-            ? 'Kolom <b>Paksa Selesai</b> akan kembali tampil untuk semua pengawas.'
-            : 'Kolom <b>Paksa Selesai</b> akan disembunyikan dari semua pengawas, '
-            + 'termasuk otomatis saat sisa waktu tinggal di bawah 15 menit. '
-            + 'Aksi lain (Reset Waktu, Reset Izin, Ulang) tetap tersedia.';
+        var tampil = $('#label-sembunyi-paksa').data('state') === '1';
+        var judul = tampil ? 'Kembalikan ke Aturan 15 Menit?' : 'Tampilkan Paksa Selesai?';
+        var pesan = tampil
+            ? 'Override dihentikan: kolom <b>Paksa Selesai</b> kembali muncul di halaman '
+            + 'pengawas mengikuti aturan bawaan, yaitu otomatis saat sisa waktu '
+            + 'sesi tinggal di bawah 15 menit.'
+            : 'Kolom <b>Paksa Selesai</b> akan langsung tampil kapan pun di halaman '
+            + 'semua pengawas (menimpa aturan 15 menit). '
+            + 'Aksi lain (Reset Waktu, Reset Izin, Ulang) tidak terpengaruh.';
 
         swal.fire({
             title: judul,
@@ -579,18 +616,18 @@ $paksaDisembunyi = cbt_paksa_selesai_disembunyikan();
             if (!result.value) return;
 
             $.ajax({
-                url: base_url + "cbtstatus/togglepakaseselesai",
+                url: base_url + "cbtstatus/togglepaksaselesai",
                 type: 'POST',
                 dataType: 'json',
                 success: function (res) {
                     if (res && res.status == 1) {
                         $('#label-sembunyi-paksa')
-                            .data('state', res.disembunyi ? '1' : '0')
-                            .text(res.disembunyi
-                                ? 'Tampilkan Paksa Selesai ke Pengawas'
-                                : 'Sembunyikan Paksa Selesai dari Pengawas');
+                            .data('state', res.tampil ? '1' : '0')
+                            .text(res.tampil
+                                ? 'Kembalikan Paksa Selesai ke Aturan 15 Menit'
+                                : 'Tampilkan Paksa Selesai ke Pengawas');
                         $('#btn-sembunyi-paksa i')
-                            .attr('class', 'fas ' + (res.disembunyi ? 'fa-eye' : 'fa-eye-slash') + ' mr-1');
+                            .attr('class', 'fas ' + (res.tampil ? 'fa-undo' : 'fa-eye') + ' mr-1');
                         showSuccessToast(res.pesan);
                     } else {
                         showWarningToast(res && res.pesan ? res.pesan : 'Gagal menyimpan.');

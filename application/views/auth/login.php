@@ -129,6 +129,10 @@
                     if (isCbtMode && data.role === 'siswa') {
                         go = 'siswa/cbt'
                     }
+                    if (data.role === 'siswa') {
+                        // minta layar penuh sekali di halaman tujuan siswa
+                        try { sessionStorage.setItem('garudaCBT.fullscreenAsk', '1'); } catch (e) {}
+                    }
                     window.location.href = go;
                 }else{
                     if(data.invalid){

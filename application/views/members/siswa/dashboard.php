@@ -824,3 +824,4 @@
         })
     }
 </script>
+<script src="<?= base_url() ?>/assets/app/js/fullscreen-gate.js?v=2"></script>

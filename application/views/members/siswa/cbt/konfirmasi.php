@@ -136,7 +136,16 @@
 </div>
 
 <script src="<?= base_url() ?>/assets/app/js/redirect.js"></script>
+<script src="<?= base_url() ?>/assets/app/js/fullscreen-guard.js?v=1"></script>
 <script>
+    /* Navigasi dari beranda otomatis membuat browser keluar fullscreen;
+       paksa siswa masuk kembali sebelum menunggu di halaman token, lalu
+       blokir setiap percobaan keluar. */
+    if ($('#konfir').length) {
+        CbtFsGuard.pasang();
+        CbtFsGuard.paksa();
+    }
+
     $('#konfir').submit(function (e) {
         e.stopPropagation();
         e.preventDefault();
