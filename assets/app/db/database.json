@@ -648,8 +648,8 @@
   "cbt_durasi_siswa": [
     {
       "name": "id_durasi",
-      "type": "varchar",
-      "max_length": 50,
+      "type": "bigint",
+      "max_length": 20,
       "default": null,
       "primary_key": 1
     },
@@ -1643,6 +1643,44 @@
     },
     {
       "name": "id_user",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 0
+    },
+    {
+      "name": "id_jadwal",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 0
+    },
+    {
+      "name": "jml_reset",
+      "type": "int",
+      "max_length": 11,
+      "default": "0",
+      "primary_key": 0
+    },
+    {
+      "name": "reset_terakhir",
+      "type": "datetime",
+      "max_length": null,
+      "default": null,
+      "primary_key": 0
+    }
+  ],
+  "cbt_reset_izin_siswa": [
+    {
+      "name": "id",
+      "type": "int",
+      "max_length": 11,
+      "default": null,
+      "primary_key": 1,
+      "auto_increment": true
+    },
+    {
+      "name": "id_siswa",
       "type": "int",
       "max_length": 11,
       "default": null,
@@ -3164,8 +3202,8 @@
   "log_ujian": [
     {
       "name": "id_log",
-      "type": "int",
-      "max_length": 11,
+      "type": "bigint",
+      "max_length": 20,
       "default": null,
       "primary_key": 1,
       "auto_increment": true

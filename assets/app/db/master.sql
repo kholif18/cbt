@@ -178,7 +178,7 @@ CREATE TABLE `cbt_bank_soal` (
 --
 
 CREATE TABLE `cbt_durasi_siswa` (
-  `id_durasi` int NOT NULL,
+  `id_durasi` bigint NOT NULL,
   `id_siswa` int DEFAULT NULL,
   `id_jadwal` int DEFAULT NULL,
   `status` int NOT NULL DEFAULT '0' COMMENT '0=belum ujian, 1=sedang ujian, 2=sudah ujian',
@@ -442,6 +442,20 @@ CREATE TABLE `cbt_rekap_nilai` (
 CREATE TABLE `cbt_reset_izin` (
   `id` int NOT NULL,
   `id_user` int NOT NULL,
+  `id_jadwal` int NOT NULL,
+  `jml_reset` int NOT NULL DEFAULT '0',
+  `reset_terakhir` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `cbt_reset_izin_siswa`
+--
+
+CREATE TABLE `cbt_reset_izin_siswa` (
+  `id` int NOT NULL,
+  `id_siswa` int NOT NULL,
   `id_jadwal` int NOT NULL,
   `jml_reset` int NOT NULL DEFAULT '0',
   `reset_terakhir` datetime DEFAULT NULL
@@ -949,7 +963,7 @@ CREATE TABLE `log_materi` (
 --
 
 CREATE TABLE `log_ujian` (
-  `id_log` int NOT NULL,
+  `id_log` bigint NOT NULL,
   `log_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `id_siswa` int DEFAULT NULL,
   `id_jadwal` int DEFAULT NULL,
@@ -1837,6 +1851,13 @@ ALTER TABLE `cbt_reset_izin`
   ADD UNIQUE KEY `uniq_user_jadwal` (`id_user`,`id_jadwal`) USING BTREE;
 
 --
+-- Indeks untuk tabel `cbt_reset_izin_siswa`
+--
+ALTER TABLE `cbt_reset_izin_siswa`
+  ADD PRIMARY KEY (`id`) USING BTREE,
+  ADD UNIQUE KEY `uniq_siswa_jadwal` (`id_siswa`,`id_jadwal`) USING BTREE;
+
+--
 -- Indeks untuk tabel `cbt_ruang`
 --
 ALTER TABLE `cbt_ruang`
@@ -2260,6 +2281,12 @@ ALTER TABLE `cbt_rekap_nilai`
 -- AUTO_INCREMENT untuk tabel `cbt_reset_izin`
 --
 ALTER TABLE `cbt_reset_izin`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `cbt_reset_izin_siswa`
+--
+ALTER TABLE `cbt_reset_izin_siswa`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --

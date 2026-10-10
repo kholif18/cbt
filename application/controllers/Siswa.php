@@ -220,15 +220,10 @@ private function paksaSelesaiUjian($id_siswa, $id_jadwal)
     $data = array(
       "status" => 1,
       "admin" => (bool) $admin,
-      "kuota" => CbtGuard::bacaKuota($this, $user->id, $id_jadwal),
       "siswa_counts" => $hitungan,
+      "jeda_siswa" => CbtGuard::jedaSiswa($this, $id_jadwal),
+      "kuota_maks" => CbtGuard::KUOTA_SISWA,
     );
-    if ($admin) {
-      $data["kuota_semua"] = $this->db
-        ->select("id_user, jml_reset, reset_terakhir")
-        ->where("id_jadwal", $id_jadwal)
-        ->get("cbt_reset_izin")->result();
-    }
     $this->output_json($data);
   }
 

@@ -6,20 +6,21 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *  applyAction() di controller Siswa tidak memeriksa peran maupun kuota dan
  *  route-nya bisa dipanggil langsung dengan huruf apa pun, jadi aturannya
  *  ditegakkan lewat hook di dua titik:
- *   - post_controller_constructor : cek peran + kuota 3x + jeda 15 menit
+ *   - post_controller_constructor : cek peran + kuota + jeda per siswa
  *   - post_controller              : catat hitungan setelah aksi jalan
  *
- *  Berlaku per (user, jadwal ujian):
- *   - pengawas : maksimal 3 reset izin, jeda 15 menit antar reset
+ *  Berlaku PER SISWA pada satu jadwal ujian (tabel cbt_reset_izin_siswa):
+ *   - pengawas : tiap siswa maksimal 3 reset izin, jeda 10 menit antar
+ *                 reset siswa yang sama
  *   - admin    : tanpa batas, tetap dicatat hitungannya
- *   - aksi "Ulang" mengembalikan kuota menjadi 3 lagi
+ *   - aksi "Ulang" mengembalikan kuota siswa terpilih menjadi 3 lagi
  */
 class CbtGuard
 {
-    /* kuota reset izin pengawas per jadwal */
-    const KUOTA_PENGAWAS = 3;
-    /* jeda antar reset izin dalam detik (15 menit) */
-    const JEDA_DETIK = 900;
+    /* kuota reset izin per siswa per jadwal */
+    const KUOTA_SISWA = 3;
+    /* jeda antar reset izin siswa yang sama, dalam detik (10 menit) */
+    const JEDA_DETIK = 600;
 
     /* rencana aksi yang lolos pemeriksaan, dicatat setelah applyAction() */
     private $rencana = null;
@@ -65,26 +66,52 @@ class CbtGuard
         $adaReset = count($reset) > 0;
         $ulangSah = count($ulang) > 0 && self::adaTargetUlang($CI, $id_jadwal, $ulang, $hapus);
 
-        if ($adaReset && !$admin) {
-            $kuota = self::bacaKuota($CI, $user->id, $id_jadwal);
-            if ($kuota['sisa'] <= 0) {
-                $this->tolak('Kuota reset izin habis (' . self::KUOTA_PENGAWAS
-                    . 'x). Pilih aksi Ulang untuk mengembalikan kuota.', array('sisa' => 0));
+        /* id_log reset berformat id_siswa . '0' . id_jadwal . <urutan> */
+        $idsSiswa = array();
+        if ($adaReset) {
+            $polak = '/^(\d+)0' . preg_quote((string) $id_jadwal, '/') . '\d+$/';
+            foreach ($reset as $idLog) {
+                $idLog = (string) $idLog;
+                if (!preg_match($polak, $idLog, $m)) {
+                    $this->tolak('Format Reset Izin tidak dikenali.');
+                }
+                $idsSiswa[] = (int) $m[1];
             }
-            if ($kuota['jeda_detik'] > 0) {
-                $this->tolak('Jeda 15 menit antar reset izin belum cukup, tunggu '
-                    . ceil($kuota['jeda_detik'] / 60) . ' menit lagi.',
-                    array('sisa_detik' => $kuota['jeda_detik']));
+            $idsSiswa = array_values(array_unique($idsSiswa));
+        }
+
+        /* pengecekan kuota + jeda hanya untuk pengawas, per siswa */
+        if ($adaReset && !$admin) {
+            foreach ($idsSiswa as $sid) {
+                $baris = $CI->db->where('id_siswa', $sid)
+                    ->where('id_jadwal', $id_jadwal)
+                    ->get('cbt_reset_izin_siswa')->row();
+                if ($baris == null) {
+                    continue;
+                }
+                if ((int) $baris->jml_reset >= self::KUOTA_SISWA) {
+                    $this->tolak('Kuota reset izin siswa #' . $sid . ' habis ('
+                        . self::KUOTA_SISWA . 'x). Pilih aksi Ulang untuk mengembalikan kuota.',
+                        array('sisa' => 0, 'id_siswa' => $sid));
+                }
+                $jeda = self::sisaJeda($baris->reset_terakhir);
+                if ($jeda > 0) {
+                    $this->tolak('Siswa #' . $sid . ' masih dalam jeda 10 menit reset izin, '
+                        . 'tunggu ' . ceil($jeda / 60) . ' menit lagi.',
+                        array('sisa_detik' => $jeda, 'id_siswa' => $sid));
+                }
             }
         }
 
         $this->rencana = array(
-            'id_user'  => (int) $user->id,
+            'id_user'   => (int) $user->id,
             'id_jadwal' => $id_jadwal,
-            'admin'    => (bool) $admin,
-            'reset'    => $adaReset,
-            'id_logs'  => $reset,
-            'ulang'    => $ulangSah,
+            'admin'     => (bool) $admin,
+            'reset'     => $adaReset,
+            'id_logs'   => $reset,
+            'ids_siswa' => $idsSiswa,
+            'ulang'     => $ulangSah,
+            'ulang_ids' => $ulang,
         );
     }
 
@@ -110,39 +137,38 @@ class CbtGuard
             && $out->update_ulangi !== false;
 
         if ($resetJalan) {
-            /* berapa kali tiap siswa direset, untuk kolom tabel admin */
+            /* berapa kali tiap siswa direset, untuk kolom "Jml Reset Izin" */
             $CI->db->where_in('id_log', $r['id_logs']);
             $CI->db->set('jml_reset', 'jml_reset + 1', false);
             $CI->db->update('log_ujian');
 
-            $baris = $CI->db->where('id_user', $r['id_user'])
-                ->where('id_jadwal', $r['id_jadwal'])
-                ->get('cbt_reset_izin')->row();
-            if ($baris == null) {
-                $CI->db->insert('cbt_reset_izin', array(
-                    'id_user'        => $r['id_user'],
-                    'id_jadwal'      => $r['id_jadwal'],
-                    'jml_reset'      => 1,
-                    'reset_terakhir' => date('Y-m-d H:i:s'),
-                ));
-            } else {
-                $CI->db->where('id', $baris->id);
-                $CI->db->set('jml_reset', 'jml_reset + 1', false);
-                $CI->db->set('reset_terakhir', date('Y-m-d H:i:s'));
-                $CI->db->update('cbt_reset_izin');
+            /* kuota + waktu jeda per siswa */
+            $now = date('Y-m-d H:i:s');
+            foreach ($r['ids_siswa'] as $sid) {
+                $baris = $CI->db->where('id_siswa', $sid)
+                    ->where('id_jadwal', $r['id_jadwal'])
+                    ->get('cbt_reset_izin_siswa')->row();
+                if ($baris == null) {
+                    $CI->db->insert('cbt_reset_izin_siswa', array(
+                        'id_siswa'       => $sid,
+                        'id_jadwal'      => $r['id_jadwal'],
+                        'jml_reset'      => 1,
+                        'reset_terakhir' => $now,
+                    ));
+                } else {
+                    $CI->db->where('id', $baris->id);
+                    $CI->db->set('jml_reset', 'jml_reset + 1', false);
+                    $CI->db->set('reset_terakhir', $now);
+                    $CI->db->update('cbt_reset_izin_siswa');
+                }
             }
         }
 
         if ($ulangJalan) {
-            /* "Ulang" mengembalikan kuota. Admin mengembalikan kuota semua
-               pengawas pada jadwal itu, pengawas hanya kuota dirinya sendiri. */
-            if ($r['admin']) {
-                $CI->db->where('id_jadwal', $r['id_jadwal']);
-            } else {
-                $CI->db->where('id_user', $r['id_user'])
-                    ->where('id_jadwal', $r['id_jadwal']);
-            }
-            $CI->db->update('cbt_reset_izin', array(
+            /* "Ulang" mengembalikan kuota siswa yang dipilih menjadi 3 lagi */
+            $CI->db->where('id_jadwal', $r['id_jadwal']);
+            $CI->db->where_in('id_siswa', $r['ulang_ids']);
+            $CI->db->update('cbt_reset_izin_siswa', array(
                 'jml_reset'      => 0,
                 'reset_terakhir' => null,
             ));
@@ -176,27 +202,34 @@ class CbtGuard
         return false;
     }
 
-    /* kuota reset izin satu user pada satu jadwal */
-    public static function bacaKuota($CI, $id_user, $id_jadwal)
+    /* sisa jeda reset izin (detik) dari sebuah baris cbt_reset_izin_siswa */
+    public static function sisaJeda($reset_terakhir)
     {
-        $baris = $CI->db->where('id_user', $id_user)
+        if ($reset_terakhir == null) {
+            return 0;
+        }
+        $lewat = strtotime($reset_terakhir);
+        if ($lewat === false) {
+            return 0;
+        }
+        return max(0, self::JEDA_DETIK - (time() - $lewat));
+    }
+
+    /* peta sisa jeda per siswa pada satu jadwal: id_siswa => detik sisa */
+    public static function jedaSiswa($CI, $id_jadwal)
+    {
+        $peta = array();
+        $baris = $CI->db->select('id_siswa, reset_terakhir')
             ->where('id_jadwal', $id_jadwal)
-            ->get('cbt_reset_izin')->row();
-        $jml = $baris == null ? 0 : (int) $baris->jml_reset;
-        $jeda = 0;
-        if ($baris != null && $baris->reset_terakhir != null) {
-            $lewat = strtotime($baris->reset_terakhir);
-            if ($lewat !== false) {
-                $jeda = max(0, self::JEDA_DETIK - (time() - $lewat));
+            ->where('reset_terakhir IS NOT NULL', null, false)
+            ->get('cbt_reset_izin_siswa')->result();
+        foreach ($baris as $b) {
+            $sisa = self::sisaJeda($b->reset_terakhir);
+            if ($sisa > 0) {
+                $peta[(string) $b->id_siswa] = $sisa;
             }
         }
-        return array(
-            'jml'            => $jml,
-            'sisa'           => max(0, self::KUOTA_PENGAWAS - $jml),
-            'maks'           => self::KUOTA_PENGAWAS,
-            'jeda_detik'     => $jeda,
-            'reset_terakhir' => $baris == null ? null : $baris->reset_terakhir,
-        );
+        return $peta;
     }
 
     /* ada log ujian yang benar-benar bisa diulang oleh payload ini? */

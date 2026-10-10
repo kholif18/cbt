@@ -130,16 +130,16 @@ $paksaTampil = cbt_paksa_tampil_dipaksa();
                                         </li>
                                         <li>
                                             Aksi <b>RESET IZIN</b> untuk mengizinkkan siswa mengerjakan ujian di
-                                            perangkat berbeda. Pengawas dibatasi <b>3 kali</b> per jadwal dengan
-                                            jeda <b>15 menit</b>; admin tanpa batas tetapi tetap dicatat
-                                            (kolom <b>Jml Reset Izin</b>).
+                                            perangkat berbeda. Pengawas dibatasi <b>3 kali per siswa</b> dengan
+                                            jeda <b>10 menit</b> antar reset siswa yang sama; admin tanpa batas
+                                            tetapi tetap dicatat (kolom <b>Jml Reset Izin</b>).
                                         </li>
                                         <li>
                                             Aksi <b>PAKSA SELESAI</b> untuk memaksa siswa menyelesaikan ujian.
                                         </li>
                                         <li>
                                             Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal, sekaligus
-                                            mengembalikan kuota reset izin pengawas menjadi 3 kali lagi.
+                                            mengembalikan kuota reset izin siswa terpilih menjadi 3 kali lagi.
                                         </li>
                                         <li>
                                             <span class="badge badge-success"><i class="fa fa-check ml-1 mr-1"></i> Terapkan Aksi</span>

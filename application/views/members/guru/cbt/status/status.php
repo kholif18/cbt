@@ -127,15 +127,17 @@
                                         </li>
                                         <li>
                                             Aksi <b>RESET IZIN</b> untuk mengizinkkan siswa mengerjakan ujian di
-                                            perangkat berbeda. Pengawas dibatasi <b>3 kali</b> per jadwal dengan
-                                            jeda <b>15 menit</b> antar reset.
+                                            perangkat berbeda. Setiap <b>siswa</b> dibatasi <b>3 kali</b> reset,
+                                            dengan jeda <b>10 menit</b> antar reset siswa yang sama (tampil
+                                            sebagai hitung mundur di sel Reset Izin). Kolom <b>Jml Reset Izin</b>
+                                            menunjukkan berapa kali siswa tersebut sudah direset.
                                         </li>
                                         <li>
                                             Aksi <b>PAKSA SELESAI</b> untuk memaksa siswa menyelesaikan ujian.
                                         </li>
                                         <li>
                                             Aksi <b>ULANG</b> untuk mengulang ujian siswa dari awal, sekaligus
-                                            mengembalikan kuota reset izin menjadi 3 kali lagi.
+                                            mengembalikan kuota reset izin siswa terpilih menjadi 3 kali lagi.
                                         </li>
                                         <li>
                                             <span class="badge badge-success"><i class="fa fa-check ml-1 mr-1"></i> Terapkan Aksi</span>
@@ -179,11 +181,12 @@
                                 <th rowspan="2" class="text-center align-middle">Sesi</th>
                                 <th colspan="2" class="text-center align-middle">Status</th>
                                 <th rowspan="2" class="text-center align-middle <?=$dnone?>">Reset<br>Waktu</th>
-                                <th colspan="3" class="text-center align-middle <?=$dnone?>">Aksi</th>
+                                <th colspan="4" class="text-center align-middle <?=$dnone?>">Aksi</th>
                             </tr>
                             <tr>
                                 <th class="text-center align-middle p-1">Mulai</th>
                                 <th class="text-center align-middle">Durasi</th>
+                                <th class="text-center align-middle <?=$dnone?>">Jml Reset<br>Izin</th>
                                 <th class="text-center align-middle <?=$dnone?>">Reset<br>Izin<br><input id="input-reset-all" class="check" type="checkbox"></th>
                                 <th class="text-center align-middle <?=$forceHide ? 'd-none' : ''?> force-col" id="th-force">Paksa<br>Selesai<br><input id="input-force-all" class="check" type="checkbox"></th>
                                 <th class="text-center align-middle <?=$dnone?>">Ulang<br><input id="input-ulang-all" class="check" type="checkbox"></th>
@@ -241,6 +244,7 @@
                                     <td class="text-center align-middle"><?=$sesi ?></td>
                                     <td class="text-center align-middle"><?=$mulai ?></td>
                                     <td class="text-center align-middle"><?=$loading . $durasi ?></td>
+                                    <td class="text-center align-middle <?=$dnone?>"><span class="jml-reset-izin">-</span></td>
                                     <td class="text-center align-middle <?=$dnone?>">
                                         <button type="button" class="btn btn-default"
                                         data-siswa="<?=$idSiswa ?>" data-jadwal="<?= $info->id_jadwal ?>"
@@ -249,6 +253,7 @@
                                     </td>
                                     <td class="text-center text-success align-middle <?=$dnone?>">
                                         <input class="check input-reset" type="checkbox" <?=$disabledReset?>>
+                                        <span class="reset-opsi d-none"></span>
                                     </td>
                                     <td class="text-center text-danger align-middle <?=$forceHide ? 'd-none' : ''?> force-col" data-sesi="<?=$sesi?>">
                                         <input class="check input-force" type="checkbox" <?=$disabledSelesai?>>
@@ -405,8 +410,8 @@
         }
     }
 
-    /* Kuota reset izin pengawas: banner + penguncian kolom Reset Izin saat
-       kuota habis atau jeda 15 menit belum lewat. Data dari server. */
+    /* Kuota reset izin per siswa (3x + jeda 10 menit), data dari server.
+       Sel kolom Reset Izin menampilkan checklist, countdown jeda, atau "3/3". */
     let kuotaReset = null;
 
     function muatKuotaReset() {
@@ -417,7 +422,7 @@
             }
             kuotaReset = d;
             renderKuotaReset();
-            kunciKolomReset();
+            terapkanStatusReset();
         });
     }
 
@@ -429,56 +434,68 @@
 
     function renderKuotaReset() {
         if (!kuotaReset) return;
-        let teks;
         if (kuotaReset.admin) {
-            teks = '<b>Admin</b> &mdash; reset izin tanpa batas, tetapi tetap dicatat.';
-            if (kuotaReset.kuota_semua && kuotaReset.kuota_semua.length) {
-                teks += '<br><small>' + kuotaReset.kuota_semua.map(function (r) {
-                    return 'User #' + r.id_user + ': ' + (parseInt(r.jml_reset) || 0) + 'x';
-                }).join(' &middot; ') + '</small>';
-            }
+            $('#isi-kuota-reset').html('<b>Admin</b> &mdash; reset izin tanpa batas, tetapi tetap dicatat.');
+            $('#banner-kuota-reset').removeClass('d-none');
         } else {
-            const k = kuotaReset.kuota;
-            teks = 'Terpakai <b>' + k.jml + '/' + k.maks + '</b>, sisa <b>' + k.sisa
-                + '</b> kali reset izin.';
-            if (k.jeda_detik > 0) {
-                teks += ' Jeda 15 menit: tersedia lagi dalam <b class="hitung-jeda">'
-                    + fmtDetik(k.jeda_detik) + '</b>.';
-            }
-            teks += '<br><small>Aksi <b>Ulang</b> mengembalikan kuota menjadi '
-                + k.maks + ' kali lagi.</small>';
+            /* pengawas: status tampil per baris, tanpa banner */
+            $('#banner-kuota-reset').addClass('d-none');
         }
-        $('#isi-kuota-reset').html(teks);
-        $('#banner-kuota-reset').removeClass('d-none');
     }
 
-    /* Kunci kolom Reset Izin (dan centang-all) selama kuota habis / jeda.
-       Status disabled bawaan tiap baris tetap disimpan supaya tidak salah
-       membuka checkbox yang memang tidak boleh dipakai. */
-    function kunciKolomReset() {
-        const kunci = kuotaReset != null && !kuotaReset.admin
-            && (parseInt(kuotaReset.kuota.sisa) <= 0 || parseInt(kuotaReset.kuota.jeda_detik) > 0);
-        $('#table-status').find('.input-reset').each(function () {
-            if (this.dataset.asli === undefined) {
-                this.dataset.asli = this.disabled ? '1' : '0';
+    /* Terapkan status per baris: "3/3" bila kuota siswa habis, countdown
+       saat jeda aktif; selain itu checklist dipulihkan seperti semula. */
+    function terapkanStatusReset() {
+        if (!kuotaReset || kuotaReset.admin) return;
+        const maks = parseInt(kuotaReset.kuota_maks) || 3;
+        const jeda = kuotaReset.jeda_siswa || {};
+        const hitung = kuotaReset.siswa_counts || {};
+        $('#table-status').find('tr').each(function () {
+            const sid = $(this).attr('data-id');
+            if (!sid) return;
+            const $input = $(this).find('.input-reset');
+            const $opsi = $(this).find('.reset-opsi');
+            const $jml = $(this).find('.jml-reset-izin');
+            if (!$input.length) return;
+            if ($input[0].dataset.asli === undefined) {
+                $input[0].dataset.asli = $input[0].disabled ? '1' : '0';
             }
-            if (kunci) this.checked = false;
-            this.disabled = kunci || this.dataset.asli === '1';
+            const asli = $input[0].dataset.asli === '1';
+            const jedaSid = parseInt(jeda[sid]) || 0;
+            const jml = parseInt(hitung[sid]) || 0;
+            $jml.text(jml + '/' + maks);
+            $input.prop('checked', false);
+            if (jedaSid > 0) {
+                $input.addClass('d-none').prop('disabled', true);
+                $opsi.removeClass('d-none').addClass('text-warning font-weight-bold')
+                    .html('<i class="fa fa-clock-o mr-1"></i><span class="hitung-jeda-siswa">' + fmtDetik(jedaSid) + '</span>');
+            } else if (jml >= maks) {
+                $input.addClass('d-none').prop('disabled', true);
+                $opsi.removeClass('d-none').addClass('text-muted')
+                    .html(maks + '/' + maks + ' <small>Ulang</small>');
+            } else {
+                $input.removeClass('d-none').prop('disabled', asli);
+                $opsi.addClass('d-none').removeClass('text-warning font-weight-bold text-muted').empty();
+            }
         });
-        if (kunci) $('#input-reset-all').prop('checked', false);
-        $('#input-reset-all').prop('disabled', kunci);
+        $('#input-reset-all').prop('checked', false);
     }
 
+    /* Hitung mundur jeda per siswa; saat habis baris kembali bisa dicentang. */
     function jedaBerdetak() {
         if (!kuotaReset || kuotaReset.admin) return;
-        const jeda = parseInt(kuotaReset.kuota.jeda_detik) || 0;
-        if (jeda <= 0) return;
-        kuotaReset.kuota.jeda_detik = jeda - 1;
-        $('.hitung-jeda').text(fmtDetik(kuotaReset.kuota.jeda_detik));
-        if (kuotaReset.kuota.jeda_detik <= 0) {
-            renderKuotaReset();
-            kunciKolomReset();
-        }
+        const jeda = kuotaReset.jeda_siswa || {};
+        let habis = [];
+        Object.keys(jeda).forEach(function (sid) {
+            jeda[sid] = jeda[sid] - 1;
+            if (jeda[sid] <= 0) habis.push(sid);
+        });
+        habis.forEach(function (sid) { delete jeda[sid]; });
+        $('.hitung-jeda-siswa').each(function () {
+            const sid = $(this).closest('tr').attr('data-id');
+            if (jeda[sid] !== undefined) $(this).text(fmtDetik(jeda[sid]));
+        });
+        if (habis.length) terapkanStatusReset();
     }
 
     function terapkanAksi() {

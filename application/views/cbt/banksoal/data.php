@@ -1287,12 +1287,42 @@ $allBanksIds = [];
                         swal.fire({
                             title: "Error",
                             text: err.Message,
-                            icon: "error"
-                        });
-                    }
+icon: "error"
+                            });
+                        }
+                    });
+                }
+            });
+        })
+    });
+
+</script>
+<script>
+    /* Badge kesiapan tampil-ke-siswa per bank soal (dihitung live via
+       cbtbanksoal/kesiapanBank, bukan dari kolom status_soal yang bisa basi).
+       Merah = bank belum siap; jadwal dari bank ini TIDAK akan terlihat siswa. */
+    $(function () {
+        $.ajax({
+            url: base_url + 'cbtbanksoal/kesiapanBank',
+            type: 'GET',
+            success: function (respon) {
+                if (!respon || !respon.status || !respon.banks) return;
+                $.each(respon.banks, function (id, info) {
+                    var badge = info.siap
+                        ? '<span class="badge badge-success badge-kesiapan" title="' + info.pesan + '">Siap tampil</span>'
+                        : '<span class="badge badge-danger badge-kesiapan" title="' + info.pesan + '"><i class="fas fa-exclamation-triangle"></i> Belum siap tampil</span>';
+                    $('input.check-bank[value="' + id + '"]').each(function () {
+                        var td = $(this).closest('tr').find('td').eq(1);
+                        if (td.length && td.find('.badge-kesiapan').length === 0) td.append('<br>' + badge);
+                    });
+                    $('button[data-id="' + id + '"]').each(function () {
+                        var ul = $(this).closest('.card').find('.card-body ul.list-group');
+                        if (ul.length && ul.find('.kesiapan-bank').length === 0) {
+                            ul.append('<li class="list-group-item p-1 kesiapan-bank">Kesiapan<span class="float-right">' + badge + '</span></li>');
+                        }
+                    });
                 });
             }
         });
-    }
-
+    });
 </script>

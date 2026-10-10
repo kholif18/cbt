@@ -58,6 +58,7 @@
                             <label>Bank Soal</label>
                             <select <?= $disabled_option ?> name="bank_id" id="bank-id"
                                                             class="form-control form-control-sm" required=""></select>
+                            <div id="bank-siap-notif" class="mt-1"></div>
                         </div>
                         <div class="col-md-3 mb-3">
                             <label>Jenis</label>
@@ -190,6 +191,70 @@
         var selBank = $('#bank-id');
         selBank.select2();
 
+        /* Blokir simpan jadwal bila bank soal belum siap tampil ke siswa.
+           Dicek live via cbtbanksoal/kesiapanBank (aturan ketat per-jenis).
+           Bank bawaan jadwal yang sedang diedit tidak diblokir (hanya info),
+           supaya jadwal berjalan tetap bisa diubah/dinonaktifkan. */
+        var bankSiapCache = {};
+
+        function setSimpanAktif(aktif) {
+            $('button[name=tambahjadwal]').prop('disabled', !aktif);
+        }
+
+        function terapkanHasilSiap(idBankCek, info) {
+            if (selBank.val() !== idBankCek) return;
+            if (idBank !== '' && idBankCek === idBank) {
+                tampilNotifSiap(info.siap
+                    ? '<small class="text-success"><i class="fas fa-check-circle"></i> ' + info.pesan + '</small>'
+                    : '<small class="text-warning"><i class="fas fa-exclamation-triangle"></i> Bank jadwal ini: ' + info.pesan + '</small>');
+                setSimpanAktif(true);
+                return;
+            }
+            if (info.siap) {
+                tampilNotifSiap('<small class="text-success"><i class="fas fa-check-circle"></i> ' + info.pesan + '</small>');
+                setSimpanAktif(true);
+            } else {
+                tampilNotifSiap('<div class="alert alert-danger p-2 mt-1 mb-0"><b><i class="fas fa-ban"></i> Bank soal belum siap &mdash; jadwal DIBLOKIR.</b><br><small>' + info.pesan + '. Lengkapi soal bank ini dulu (menu Bank Soal), atau pilih bank lain.</small></div>');
+                setSimpanAktif(false);
+            }
+        }
+
+        function tampilNotifSiap(html) {
+            $('#bank-siap-notif').html(html);
+        }
+
+        function cekKesiapanBank(idBankCek) {
+            if (!idBankCek) {
+                tampilNotifSiap('');
+                setSimpanAktif(true);
+                return;
+            }
+            if (idBankCek in bankSiapCache) {
+                terapkanHasilSiap(idBankCek, bankSiapCache[idBankCek]);
+                return;
+            }
+            tampilNotifSiap('<small class="text-muted"><i class="fas fa-spinner fa-spin"></i> Memeriksa kesiapan bank soal...</small>');
+            setSimpanAktif(false);
+            $.ajax({
+                url: base_url + 'cbtbanksoal/kesiapanBank/' + idBankCek,
+                type: 'GET',
+                success: function (respon) {
+                    var info = respon && respon.banks ? respon.banks[idBankCek] : null;
+                    if (!info) {
+                        tampilNotifSiap('<div class="alert alert-warning p-2 mt-1 mb-0"><small>Tidak bisa memeriksa kesiapan bank. Lanjutkan dengan hati-hati.</small></div>');
+                        setSimpanAktif(true);
+                        return;
+                    }
+                    bankSiapCache[idBankCek] = info;
+                    terapkanHasilSiap(idBankCek, info);
+                },
+                error: function () {
+                    tampilNotifSiap('<div class="alert alert-warning p-2 mt-1 mb-0"><small>Tidak bisa memeriksa kesiapan bank. Lanjutkan dengan hati-hati.</small></div>');
+                    setSimpanAktif(true);
+                }
+            });
+        }
+
         $('.tgl').datetimepicker({
             icons:
                 {
@@ -224,6 +289,18 @@
         $('#create').submit('click', function (e) {
             e.preventDefault();
             e.stopImmediatePropagation();
+            var bankDipilih = selBank.val();
+            var infoDipilih = bankDipilih ? bankSiapCache[bankDipilih] : null;
+            if (bankDipilih && bankDipilih !== idBank && (!infoDipilih || !infoDipilih.siap)) {
+                if (!infoDipilih) cekKesiapanBank(bankDipilih);
+                swal.fire({
+                    title: 'Bank soal belum siap',
+                    text: (infoDipilih ? infoDipilih.pesan : 'Tunggu pemeriksaan kesiapan bank soal selesai') + '. Jadwal diblokir sampai bank soal dilengkapi.',
+                    icon: 'error',
+                    showCancelButton: false
+                });
+                return;
+            }
             reEnable(false);
             console.log("data:", $(this).serialize());
 
@@ -295,6 +372,7 @@
                         var selected = i === idBank ? 'selected' : '';
                         if (i !== '') selBank.append('<option value="' + i + '" ' + selected + '>' + v + '</option>');
                     });
+                    cekKesiapanBank(selBank.val());
                 }, error: function (xhr, status, error) {
                     console.log("error", xhr.responseText);
                 }
@@ -303,6 +381,10 @@
 
         selMapel.on('change', function () {
             getBankMapel($(this).val());
+        });
+
+        selBank.on('change', function () {
+            cekKesiapanBank($(this).val());
         });
 
         getBankMapel(selMapel.val());
