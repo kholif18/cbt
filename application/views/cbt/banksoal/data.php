@@ -661,11 +661,11 @@ $allBanksIds = [];
             <div class="modal-header">
                 <?php
                 if ($id_filter == '1') {
-                    $title = 'Bank Soal (' . $gurus[$id_guru] . ')';
+                    $title = 'Bank Soal (' . ($gurus[$id_guru] ?? '') . ')';
                 } elseif ($id_filter == '2') {
-                    $title = 'Bank Soal (' . $mapels[$id_mapel] . ')';
+                    $title = 'Bank Soal (' . ($mapels[$id_mapel] ?? '') . ')';
                 } elseif ($id_filter == '3') {
-                    $title = 'Bank Soal Kelas ' . $levels[$id_level];
+                    $title = 'Bank Soal Kelas ' . ($levels[$id_level] ?? '');
                 } else {
                     $title = 'Semua Bank Soal';
                 }
@@ -1293,8 +1293,7 @@ icon: "error"
                     });
                 }
             });
-        })
-    });
+        }
 
 </script>
 <script>
@@ -1302,6 +1301,29 @@ icon: "error"
        cbtbanksoal/kesiapanBank, bukan dari kolom status_soal yang bisa basi).
        Merah = bank belum siap; jadwal dari bank ini TIDAK akan terlihat siswa. */
     $(function () {
+        var qs = new URLSearchParams(window.location.search);
+        var modeAktif = (typeof mode !== 'undefined' && mode) ? mode : '';
+        /* Kunjungan tanpa filter (mis. klik menu) langsung tampilkan Semua,
+           supaya daftar tidak kosong dan filter selalu punya jangkar. */
+        if (!qs.get('type')) {
+            window.location.replace(base_url + 'cbtbanksoal?type=0&mode=' + modeAktif);
+            return;
+        }
+        /* Pengaman navigasi filter: pasang ulang di blok independen ini supaya
+           filter tetap bekerja walau blok skrip utama halaman gagal di tengah jalan. */
+        var tipeSekarang = qs.get('type') || '';
+        jQuery('#filter').off('change.banksiap').on('change.banksiap', function () {
+            var type = jQuery(this).val();
+            if (type == '0' && tipeSekarang != '0') {
+                window.location.href = base_url + 'cbtbanksoal?type=0&mode=' + modeAktif;
+            }
+        });
+        jQuery('.sel').off('change.banksiap').on('change.banksiap', function () {
+            var id = jQuery(this).val();
+            var type = jQuery('#filter').val() || tipeSekarang;
+            if (id === '' || id === null || !type || type == '0') return;
+            window.location.href = base_url + 'cbtbanksoal?id=' + id + '&type=' + type + '&mode=' + modeAktif;
+        });
         $.ajax({
             url: base_url + 'cbtbanksoal/kesiapanBank',
             type: 'GET',
