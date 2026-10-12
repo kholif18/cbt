@@ -566,7 +566,7 @@ CREATE TABLE `cbt_soal` (
 --
 
 CREATE TABLE `cbt_soal_siswa` (
-  `id_soal_siswa` varchar(15) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `id_soal_siswa` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `id_bank` int DEFAULT NULL,
   `id_jadwal` int DEFAULT NULL,
   `id_soal` int DEFAULT NULL,

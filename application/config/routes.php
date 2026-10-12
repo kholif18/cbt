@@ -58,3 +58,6 @@ $route['login'] = 'Auth/index';
 $route['logout'] = 'Auth/logout';
 $route['404_override'] = 'auth';
 $route['translate_uri_dashes'] = FALSE;
+
+// Override penilaian method to use fixed version (bug fix: undefined $durasi variable)
+$route['siswa/penilaian/(:num)'] = 'siswa/penilaian_fixed/$1';

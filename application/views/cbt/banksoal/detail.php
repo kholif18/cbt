@@ -1308,6 +1308,7 @@
 <?= form_open('', array('id' => 'up')) ?>
 <?= form_close() ?>
 
+<script type="text/javascript" src="<?= base_url() ?>/assets/app/js/FileSaver.min.js"></script>
 <script type="text/javascript" src="<?= base_url() ?>/assets/app/js/html-docx.js"></script>
 <script src="<?= base_url() ?>/assets/app/js/convert-area.js"></script>
 

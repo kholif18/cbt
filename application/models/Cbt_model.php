@@ -188,4 +188,12 @@
    $this->db->order_by("b.bank_kode", "ASC");
    return $this->db->get()->result();
   }
+
+    // FIX: getBankFullInfo includes bank_kelas and soal_agama for createQueueNumber
+    public function getBankFullInfo($id_bank) {
+        $this->db->select('a.id_bank, a.bank_kelas, a.soal_agama, a.tampil_pg, a.tampil_kompleks, a.tampil_jodohkan, a.tampil_isian, a.tampil_esai, a.bobot_pg, a.bobot_kompleks, a.bobot_jodohkan, a.bobot_isian, a.bobot_esai, a.opsi');
+        $this->db->from('cbt_bank_soal a');
+        $this->db->where('a.id_bank', $id_bank);
+        return $this->db->get()->row();
+    }
 }

@@ -355,7 +355,10 @@
         var html = '';
         if (jenis == "1") {
             $.each(data.soal_opsi, function (key, opsis) {
-                if (opsis.valAlias != "") {
+                // Jangan tampilkan opsi yang tidak punya teks. Ini mencegah munculnya
+                // pilihan kosong (mis. E kosong pada soal 4 pilihan) bila data dibuat
+                // sebelum perbaikan jumlah opsi.
+                if (opsis.valAlias != "" && opsis.opsi != null && String(opsis.opsi).trim() !== "") {
                     html += '<label class="container-jawaban font-weight-normal">' + opsis.opsi +
                         '<input type="radio"' +
                         ' name="jawaban"' +
